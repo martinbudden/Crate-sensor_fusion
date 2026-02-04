@@ -1,0 +1,7 @@
+[package]
+name = "sensor_fusion"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vector_quaternion_matrix = { git = "https://github.com/martinbudden/Crate-vector_quaternion_matrix" }

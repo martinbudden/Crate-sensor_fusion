@@ -2,6 +2,8 @@
 name = "sensor_fusion"
 version = "0.1.0"
 edition = "2024"
+authors = ["Martin Budden"]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 vector_quaternion_matrix = { git = "https://github.com/martinbudden/Crate-vector_quaternion_matrix" }

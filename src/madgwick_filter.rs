@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
-use vector_quaternion_matrix::{FastMath, Quaternion, Vector3d};
+use vector_quaternion_matrix::{MathMethods, Quaternion, Vector3d};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MadgwickFilter {

@@ -54,7 +54,7 @@ impl SensorFusion for ComplementaryFilter {
     ) -> Quaternion {
         // Calculate quaternion derivative (qDot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
         // Twice the actual value is used to reduce the number of multiplications needed
-        let q_dot = q_dot(&self.q, &gyro_rps);
+        let q_dot = q_dot(&self.q, gyro_rps);
 
         // Update the attitude quaternion using simple Euler integration (qNew = qOld + qDot*deltaT).
         // Note: to reduce the number of multiplications, _2qDot and halfDeltaT are used, ie qNew = qOld +_2qDot*deltaT*0.5.

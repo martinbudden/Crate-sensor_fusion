@@ -2,7 +2,7 @@ use crate::sensor_fusion::{SensorFusion, q_dot};
 use core::ops::{Add, Div, Mul, Neg, Sub};
 use imu_sensors::ImuReading;
 use num_traits::{One, Zero};
-use vector_quaternion_matrix::{MathMethods, Quaternion};
+use vector_quaternion_matrix::{MathFunctions, Quaternion};
 
 pub type MadgwickFilterf32 = MadgwickFilter<f32>;
 pub type MadgwickFilterf64 = MadgwickFilter<f64>;
@@ -40,7 +40,7 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + MathMethods,
+        + MathFunctions,
 {
     pub fn set_beta(&mut self, beta: T) {
         self.set_free_parameters(beta, T::zero());
@@ -73,7 +73,7 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + MathMethods,
+        + MathFunctions,
 {
     fn set_free_parameters(&mut self, parameter0: T, _parameter1: T) {
         self.beta = parameter0;

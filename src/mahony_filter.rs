@@ -3,7 +3,7 @@ use num_traits::{One, Zero};
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
 use imu_sensors::ImuReading;
-use vector_quaternion_matrix::{MathMethods, Quaternion, Vector3d};
+use vector_quaternion_matrix::{MathConstants, MathFunctions, Quaternion, Vector3d};
 
 pub type MahonyFilterf32 = MahonyFilter<f32>;
 pub type MahonyFilterf64 = MahonyFilter<f64>;
@@ -22,12 +22,12 @@ pub struct MahonyFilter<T> {
 
 impl<T> Default for MahonyFilter<T>
 where
-    T: Zero + One + Default,
+    T: Zero + One + Default + MathConstants,
 {
     fn default() -> Self {
         MahonyFilter {
             q: Quaternion::default(),
-            kp: T::one(),
+            kp: T::TEN,
             ki: T::zero(),
             error_integral: Vector3d::default(),
             gyro_rps_1: Vector3d::default(),
@@ -50,7 +50,8 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + MathMethods,
+        + MathFunctions
+        + MathConstants,
 {
     pub fn set_proportional_integral(&mut self, kp: T, ki: T) {
         self.set_free_parameters(kp, ki);
@@ -69,7 +70,8 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + MathMethods,
+        + MathFunctions
+        + MathConstants,
 {
     fn set_free_parameters(&mut self, parameter0: T, parameter1: T) {
         self.kp = parameter0;
@@ -93,14 +95,8 @@ where
         // See https://docs.rosflight.org/v1.3/algorithms/estimator/#modifications-to-original-passive-filter for a publicly available explanation
         let mut gyro = imu_reading.gyro_rps;
         if self.use_quadratic_interpolation {
-            let two = T::one() + T::one();
-            let three = two + T::one();
-            let four = three + T::one();
-            let five = four + T::one();
-            let eight = two * four;
-            let twelve = three * four;
-            gyro = imu_reading.gyro_rps * (five / twelve) + self.gyro_rps_1 * (eight / twelve)
-                - self.gyro_rps_2 * (T::one() / twelve);
+            gyro = imu_reading.gyro_rps * (T::FIVE / T::TWELVE) + self.gyro_rps_1 * (T::EIGHT / T::TWELVE)
+                - self.gyro_rps_2 * (T::one() / T::TWELVE);
             self.gyro_rps_2 = self.gyro_rps_1;
             self.gyro_rps_1 = imu_reading.gyro_rps;
         }
@@ -117,8 +113,7 @@ where
         if self.use_matrix_exponential_approximation {
             // Matrix Exponential Approximation (From Attitude Representation and Kinematic Propagation for Low-Cost UAVs by Robert T. Casey, Equation 12)
             let gyro_magnitude = gyro.norm();
-            let half = T::one() / (T::one() + T::one());
-            let theta = gyro_magnitude * half * delta_t;
+            let theta = gyro_magnitude * T::HALF * delta_t;
             let (sin, cos) = theta.sin_cos();
             let t1 = cos;
             let t2 = (T::one() / gyro_magnitude) * sin;

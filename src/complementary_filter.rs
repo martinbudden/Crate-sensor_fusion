@@ -3,7 +3,7 @@ use num_traits::{One, Zero};
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
 use imu_sensors::ImuReading;
-use vector_quaternion_matrix::{MathMethods, Quaternion, Vector3d};
+use vector_quaternion_matrix::{MathFunctions, Quaternion, Vector3d};
 
 pub type ComplementaryFilterf32 = ComplementaryFilter<f32>;
 pub type ComplementaryFilterf64 = ComplementaryFilter<f64>;
@@ -41,7 +41,7 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + MathMethods,
+        + MathFunctions,
 {
     /// Calculate roll (theta) from the normalized accelerometer readings
     pub fn roll_radians_from_acc_normalized(acc: Vector3d<T>) -> T {
@@ -68,7 +68,7 @@ where
         + Sub<Output = T>
         + Mul<Output = T>
         + Div<Output = T>
-        + MathMethods,
+        + MathFunctions,
 {
     fn set_free_parameters(&mut self, parameter0: T, _parameter1: T) {
         self.alpha = parameter0;

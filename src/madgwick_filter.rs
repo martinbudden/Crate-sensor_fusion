@@ -1,5 +1,5 @@
 use crate::sensor_fusion::{SensorFusion, q_dot};
-use core::ops::{Add, Div, Mul, Neg, Sub};
+use core::ops::{Div, Neg, Sub};
 use imu_sensors::ImuReading;
 use num_traits::{One, Zero};
 use vector_quaternion_matrix::{MathMethods, Quaternion};
@@ -30,17 +30,7 @@ where
 
 impl<T> MadgwickFilter<T>
 where
-    T: Copy
-        + One
-        + Zero
-        + Neg<Output = T>
-        + PartialEq
-        + PartialOrd
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Div<Output = T>
-        + MathMethods,
+    T: Copy + One + Zero + Neg<Output = T> + PartialOrd + Sub<Output = T> + Div<Output = T> + MathMethods,
 {
     pub fn set_beta(&mut self, beta: T) {
         self.set_free_parameters(beta, T::zero());
@@ -63,17 +53,7 @@ where
 ///
 impl<T> SensorFusion<T> for MadgwickFilter<T>
 where
-    T: Copy
-        + One
-        + Zero
-        + Neg<Output = T>
-        + PartialEq
-        + PartialOrd
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Div<Output = T>
-        + MathMethods,
+    T: Copy + One + Zero + Neg<Output = T> + PartialOrd + Sub<Output = T> + Div<Output = T> + MathMethods,
 {
     fn set_free_parameters(&mut self, parameter0: T, _parameter1: T) {
         self.beta = parameter0;
@@ -132,11 +112,13 @@ mod tests {
     use super::*;
     use imu_sensors::ImuReadingf32;
     use vector_quaternion_matrix::{Quaternionf32, Vector3df32};
+
     fn is_normal<T: Sized + Send + Sync + Unpin>() {}
+    fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
 
     #[test]
     fn normal_types() {
-        is_normal::<MadgwickFilter<f32>>();
+        is_full::<MadgwickFilter<f32>>();
     }
     #[test]
     fn update_orientation() {

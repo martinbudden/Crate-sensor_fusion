@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, Neg, Sub};
+use core::ops::{Div, Neg, Sub};
 use num_traits::{One, Zero};
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
@@ -46,9 +46,7 @@ where
         + Neg<Output = T>
         + PartialEq
         + PartialOrd
-        + Add<Output = T>
         + Sub<Output = T>
-        + Mul<Output = T>
         + Div<Output = T>
         + MathMethods
         + MathConstants,
@@ -64,11 +62,8 @@ where
         + One
         + Zero
         + Neg<Output = T>
-        + PartialEq
         + PartialOrd
-        + Add<Output = T>
         + Sub<Output = T>
-        + Mul<Output = T>
         + Div<Output = T>
         + MathMethods
         + MathConstants,
@@ -142,10 +137,11 @@ mod tests {
     use imu_sensors::ImuReadingf32;
 
     fn is_normal<T: Sized + Send + Sync + Unpin>() {}
+    fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
 
     #[test]
     fn normal_types() {
-        is_normal::<MahonyFilter<f32>>();
+        is_full::<MahonyFilter<f32>>();
     }
     #[test]
     fn update_orientation() {

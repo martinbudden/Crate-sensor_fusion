@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, Neg, Sub};
+use core::ops::{Div, Neg, Sub};
 use num_traits::{One, Zero};
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
@@ -31,17 +31,7 @@ where
 
 impl<T> ComplementaryFilter<T>
 where
-    T: Copy
-        + One
-        + Zero
-        + Neg<Output = T>
-        + PartialEq
-        + PartialOrd
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Div<Output = T>
-        + MathMethods,
+    T: Copy + One + Zero + Neg<Output = T> + PartialEq + PartialOrd + Sub<Output = T> + Div<Output = T> + MathMethods,
 {
     /// Calculate roll (theta) from the normalized accelerometer readings
     pub fn roll_radians_from_acc_normalized(acc: Vector3d<T>) -> T {
@@ -58,17 +48,7 @@ where
 
 impl<T> SensorFusion<T> for ComplementaryFilter<T>
 where
-    T: Copy
-        + One
-        + Zero
-        + Neg<Output = T>
-        + PartialEq
-        + PartialOrd
-        + Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Div<Output = T>
-        + MathMethods,
+    T: Copy + One + Zero + Neg<Output = T> + PartialOrd + Sub<Output = T> + Div<Output = T> + MathMethods,
 {
     fn set_free_parameters(&mut self, parameter0: T, _parameter1: T) {
         self.alpha = parameter0;
@@ -109,10 +89,11 @@ mod tests {
     use vector_quaternion_matrix::{Quaternionf32, Vector3df32};
 
     fn is_normal<T: Sized + Send + Sync + Unpin>() {}
+    fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
 
     #[test]
     fn normal_types() {
-        is_normal::<ComplementaryFilter<f32>>();
+        is_full::<ComplementaryFilter<f32>>();
     }
     #[test]
     fn update_orientation() {

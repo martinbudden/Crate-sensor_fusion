@@ -6,6 +6,7 @@
         "codegen",
         "debuginfo",
         "Filterf",
+        "Fusionf",
         "madgwick",
         "mahony",
         "qdot",

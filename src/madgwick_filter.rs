@@ -221,17 +221,17 @@ mod tests {
     }
     #[test]
     fn update_orientation() {
-        let mut sensor_fusion = MadgwickFilterf32::default();
+        let mut madgwick_filter = MadgwickFilterf32::default();
         let requires_initialization = MadgwickFilterf32::requires_initialization();
         assert_eq!(requires_initialization, true);
 
-        sensor_fusion.set_beta(1.0);
+        madgwick_filter.set_beta(1.0);
 
         let delta_t: f32 = 0.0;
         let acc = Vector3df32::default();
         let gyro_rps = Vector3df32::default();
 
-        let orientation = sensor_fusion.fuse_acc_gyro(acc, gyro_rps, delta_t);
+        let orientation = madgwick_filter.fuse_acc_gyro(acc, gyro_rps, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 })
     }
 }

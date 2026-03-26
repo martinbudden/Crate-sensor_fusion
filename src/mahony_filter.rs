@@ -2,7 +2,6 @@ use core::ops::{Div, Neg, Sub};
 use num_traits::{One, Zero};
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
-use imu_sensors::ImuReading;
 use vector_quaternion_matrix::{MathConstants, MathMethods, Quaternion, Vector3d};
 
 pub type MahonyFilterf32 = MahonyFilter<f32>;
@@ -76,9 +75,9 @@ where
         true
     }
 
-    fn update_orientation(&mut self, imu_reading: ImuReading<T>, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
         // Normalize acceleration
-        let acc = imu_reading.acc.normalized();
+        let acc = acc.normalized();
 
         // Calculate estimated direction of gravity in the sensor coordinate frame
         let gravity = self.q.gravity();
@@ -88,12 +87,12 @@ where
 
         // Quadratic Interpolation (From Attitude Representation and Kinematic Propagation for Low-Cost UAVs by Robert T. Casey, Equation 14)
         // See https://docs.rosflight.org/v1.3/algorithms/estimator/#modifications-to-original-passive-filter for a publicly available explanation
-        let mut gyro = imu_reading.gyro_rps;
+        let mut gyro = gyro_rps;
         if self.use_quadratic_interpolation {
-            gyro = imu_reading.gyro_rps * (T::FIVE / T::TWELVE) + self.gyro_rps_1 * (T::EIGHT / T::TWELVE)
+            gyro = gyro_rps * (T::FIVE / T::TWELVE) + self.gyro_rps_1 * (T::EIGHT / T::TWELVE)
                 - self.gyro_rps_2 * (T::one() / T::TWELVE);
             self.gyro_rps_2 = self.gyro_rps_1;
-            self.gyro_rps_1 = imu_reading.gyro_rps;
+            self.gyro_rps_1 = gyro_rps;
         }
 
         // Apply proportional feedback
@@ -128,13 +127,17 @@ where
 
         self.q
     }
+
+    fn fuse_acc_gyro_mag(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, _mag: Vector3d<T>, delta_t: T) -> Quaternion<T> {
+        self.fuse_acc_gyro(acc, gyro_rps, delta_t)
+    }
 }
 
 #[cfg(any(debug_assertions, test))]
 mod tests {
     #![allow(unused)]
     use super::*;
-    use imu_sensors::ImuReadingf32;
+    use vector_quaternion_matrix::Vector3df32;
 
     fn is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
@@ -147,11 +150,15 @@ mod tests {
     fn update_orientation() {
         let mut sensor_fusion = MahonyFilterf32::default();
         let requires_initialization = MahonyFilterf32::requires_initialization();
-        sensor_fusion.set_proportional_integral(10.0, 0.0);
         assert_eq!(requires_initialization, true);
+
+        sensor_fusion.set_proportional_integral(10.0, 0.0);
+
         let delta_t: f32 = 0.0;
-        let imu_reading = ImuReadingf32::default();
-        let orientation = sensor_fusion.update_orientation(imu_reading, delta_t);
+        let acc = Vector3df32::default();
+        let gyro_rps = Vector3df32::default();
+
+        let orientation = sensor_fusion.fuse_acc_gyro(acc, gyro_rps, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 })
     }
 }

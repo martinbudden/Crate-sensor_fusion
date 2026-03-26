@@ -2,7 +2,6 @@ use core::ops::{Div, Neg, Sub};
 use num_traits::{One, Zero};
 
 use crate::sensor_fusion::{SensorFusion, q_dot};
-use imu_sensors::ImuReading;
 use vector_quaternion_matrix::{MathMethods, Quaternion, Vector3d};
 
 pub type ComplementaryFilterf32 = ComplementaryFilter<f32>;
@@ -56,17 +55,18 @@ where
     fn requires_initialization() -> bool {
         false
     }
-    fn update_orientation(&mut self, imu_reading: ImuReading<T>, delta_t: T) -> Quaternion<T> {
+
+    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
         // Calculate quaternion derivative (qDot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
         // Twice the actual value is used to reduce the number of multiplications needed
-        let q_dot = q_dot(&self.q, imu_reading.gyro_rps);
+        let q_dot = q_dot(&self.q, gyro_rps);
 
         // Update the attitude quaternion using simple Euler integration (qNew = qOld + qDot*deltaT).
         // Note: to reduce the number of multiplications, _2qDot and halfDeltaT are used, ie qNew = qOld +_2qDot*deltaT*0.5.
         self.q += q_dot * delta_t;
 
         // use the normalized accelerometer data to calculate an estimate of the attitude
-        let acc: Vector3d<T> = imu_reading.acc.normalized();
+        let acc: Vector3d<T> = acc.normalized();
         let roll_radians: T = ComplementaryFilter::roll_radians_from_acc_normalized(acc);
         let pitch_radians = ComplementaryFilter::pitch_radians_from_acc_normalized(acc);
         let q: Quaternion<T> = Quaternion::from_roll_pitch_angles_radians(roll_radians, pitch_radians);
@@ -78,6 +78,10 @@ where
         self.q.normalize();
 
         self.q
+    }
+
+    fn fuse_acc_gyro_mag(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, _mag: Vector3d<T>, delta_t: T) -> Quaternion<T> {
+        self.fuse_acc_gyro(acc, gyro_rps, delta_t)
     }
 }
 
@@ -99,11 +103,16 @@ mod tests {
     fn update_orientation() {
         let mut sensor_fusion = ComplementaryFilterf32::default();
         let requires_initialization = ComplementaryFilterf32::requires_initialization();
-        sensor_fusion.set_alpha(1.0);
         assert_eq!(requires_initialization, false);
+
+        sensor_fusion.set_alpha(1.0);
+
         let delta_t: f32 = 0.0;
-        let imu_reading = ImuReadingf32::default();
-        let orientation: Quaternionf32 = sensor_fusion.update_orientation(imu_reading, delta_t);
+        let acc = Vector3df32::default();
+        let gyro_rps = Vector3df32::default();
+
+        let orientation = sensor_fusion.fuse_acc_gyro(acc, gyro_rps, delta_t);
+
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 })
     }
 }

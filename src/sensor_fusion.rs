@@ -1,12 +1,13 @@
 use core::ops::{Add, Div, Mul, Sub};
-use imu_sensors::ImuReading;
 use num_traits::One;
-use vector_quaternion_matrix::{Quaternion, Vector3d};
+use vector_quaternion_matrix::{Quaternion, Quaternionf32, Vector3d};
 
 pub trait SensorFusion<T> {
-    fn update_orientation(&mut self, imu_reading: ImuReading<T>, delta_t: T) -> Quaternion<T>;
     fn set_free_parameters(&mut self, parameter0: T, parameter1: T);
     fn requires_initialization() -> bool;
+
+    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T>;
+    fn fuse_acc_gyro_mag(&mut self, acc: Vector3d<T>, gyro: Vector3d<T>, mag: Vector3d<T>, delta_t: T) -> Quaternion<T>;
 }
 
 /// Calculate quaternion derivative (dq/dt aka q_dot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
@@ -26,7 +27,7 @@ where
 #[cfg(any(debug_assertions, test))]
 mod tests {
     use super::*;
-    use imu_sensors::ImuReadingf32;
+    use vector_quaternion_matrix::Vector3df32;
 
     pub struct TestStruct;
     impl SensorFusion<f32> for TestStruct {
@@ -34,10 +35,14 @@ mod tests {
         fn requires_initialization() -> bool {
             true
         }
-        fn update_orientation(&mut self, _imu_reading: ImuReadingf32, _delta_t: f32) -> Quaternion<f32> {
-            Quaternion::default()
+        fn fuse_acc_gyro(&mut self, _acc: Vector3df32, _gyro_rps: Vector3df32, _delta_t:f32) -> Quaternionf32 {
+            Quaternionf32::default()
+        }
+        fn fuse_acc_gyro_mag(&mut self, acc: Vector3df32, gyro_rps: Vector3df32, _mag: Vector3df32, delta_t: f32) -> Quaternionf32 {
+            self.fuse_acc_gyro(acc, gyro_rps, delta_t)
         }
     }
+    
 
     #[allow(dead_code)]
     fn sensor_fusion() {
@@ -48,8 +53,10 @@ mod tests {
         test_struct.set_free_parameters(0.0, 0.0);
 
         let delta_t: f32 = 0.0;
-        let imu_reading = ImuReadingf32::default();
-        let orientation = test_struct.update_orientation(imu_reading, delta_t);
+        let acc = Vector3df32::default();
+        let gyro_rps = Vector3df32::default();
+
+        let orientation = test_struct.fuse_acc_gyro(acc, gyro_rps, delta_t);
         assert_eq!(orientation, Quaternion::default());
     }
 }

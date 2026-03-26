@@ -1,8 +1,7 @@
 use crate::sensor_fusion::{SensorFusion, q_dot};
 use core::ops::{Div, Neg, Sub};
-use imu_sensors::ImuReading;
 use num_traits::{One, Zero};
-use vector_quaternion_matrix::{MathMethods, Quaternion};
+use vector_quaternion_matrix::{MathMethods, Quaternion, Vector3d};
 
 pub type MadgwickFilterf32 = MadgwickFilter<f32>;
 pub type MadgwickFilterf64 = MadgwickFilter<f64>;
@@ -63,16 +62,16 @@ where
         true
     }
 
-    fn update_orientation(&mut self, imu_reading: ImuReading<T>, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
         // Calculate quaternion derivative (q_dot, aka dq/dt) from the angular rate
-        let mut q_dot = q_dot(&self.q, imu_reading.gyro_rps);
+        let mut q_dot = q_dot(&self.q, gyro_rps);
 
         // Acceleration is an unreliable indicator of orientation when in high-g maneuvers,
         // so exclude it from the calculation in these cases
-        let acc_magnitude_squared = imu_reading.acc.squared_norm();
+        let acc_magnitude_squared = acc.squared_norm();
         if acc_magnitude_squared <= self.acc_magnitude_squared_max {
             // Normalize acceleration if it is non-zero
-            let mut a = imu_reading.acc;
+            let mut a = acc;
             if acc_magnitude_squared != T::zero() {
                 a *= acc_magnitude_squared.reciprocal_sqrt();
             }
@@ -104,6 +103,106 @@ where
         self.q.normalize();
         self.q
     }
+
+    fn fuse_acc_gyro_mag(
+        &mut self,
+        acc: Vector3d<T>,
+        gyro_rps: Vector3d<T>,
+        mag: Vector3d<T>,
+        delta_t: T,
+    ) -> Quaternion<T> {
+        let mut a = acc;
+        let acc_magnitude_squared = a.squared_norm();
+        // Acceleration is an unreliable indicator of orientation when in high-g maneuvers,
+        // so exclude it from the calculation in these cases
+        if acc_magnitude_squared > self.acc_magnitude_squared_max {
+            a.set_zero();
+        }
+
+        let mut m = mag;
+        m.normalize();
+
+        // make copies of the components of q to simplify the algebraic expressions
+        let q0 = self.q.w;
+        let q1 = self.q.x;
+        let q2 = self.q.y;
+        let q3 = self.q.z;
+        // Auxiliary variables to avoid repeated arithmetic
+        let q0q0 = q0 * q0;
+        let q0q1 = q0 * q1;
+        let q0q2 = q0 * q2;
+        let q0q3 = q0 * q3;
+        let q1q1 = q1 * q1;
+        let q1q2 = q1 * q2;
+        let q1q3 = q1 * q3;
+        let q2q2 = q2 * q2;
+        let q2q3 = q2 * q3;
+        let q3q3 = q3 * q3;
+
+        let q1q1_plus_q2q2 = q1q1 + q2q2;
+        let q2q2_plus_q3q3 = q2q2 + q3q3;
+
+        // Reference direction of Earth's magnetic field
+        let two = T::one() + T::one();
+        let hx = m.x * (q0q0 + q1q1 - q2q2_plus_q3q3) + two * (m.y * (q1q2 - q0q3) + m.z * (q0q2 + q1q3));
+        let hy = two * (m.x * (q0q3 + q1q2) + m.y * (q0q0 - q1q1 + q2q2 - q3q3) + m.z * (q2q3 - q0q1));
+
+        let bx_bx = hx * hx + hy * hy;
+        let bx = bx_bx.sqrt();
+        let bz = two * (m.x * (q1q3 - q0q2) + m.y * (q0q1 + q2q3)) + m.z * (q0q0 - q1q1_plus_q2q2 + q3q3);
+        let bz_bz = bz * bz;
+        let _4bx_bz = two * two * bx * bz;
+
+        let mx_bx = m.x * bx;
+        let my_bx = m.y * bx;
+        let mz_bx = m.z * bx;
+        let mz_bz = m.z * bz;
+
+        let ax_plus_mx_bz = a.x + m.x * bz;
+        let ay_plus_my_bz = a.y + m.y * bz;
+
+        let sum_squares_minus_one = q0q0 + q1q1_plus_q2q2 + q3q3 - T::one();
+        let common = sum_squares_minus_one + q1q1_plus_q2q2 + a.z;
+
+        let half = T::one() / two;
+        // Gradient decent algorithm corrective step
+        let s0 = q0 * two * (q1q1_plus_q2q2 * (T::one() + bz_bz) + bx_bx * q2q2_plus_q3q3) - q1 * ay_plus_my_bz
+            + q2 * (ax_plus_mx_bz - mz_bx)
+            + q3 * (my_bx - _4bx_bz * q0q1);
+
+        let s1 = -q0 * ay_plus_my_bz
+            + q1 * two * (common + mz_bz + bx_bx * q2q2_plus_q3q3 + bz_bz * (sum_squares_minus_one + q1q1_plus_q2q2))
+            - q2 * my_bx
+            - q3 * (ax_plus_mx_bz + mz_bx + _4bx_bz * (half * sum_squares_minus_one + q1q1));
+
+        let s2 = q0 * (ax_plus_mx_bz - mz_bx) - q1 * my_bx
+            + q2 * two
+                * (common
+                    + mz_bz
+                    + mx_bx
+                    + bx_bx * (sum_squares_minus_one + q2q2_plus_q3q3)
+                    + bz_bz * (sum_squares_minus_one + q1q1_plus_q2q2))
+            - q3 * (ay_plus_my_bz + _4bx_bz * q1q2);
+
+        let s3 = q0 * my_bx
+            - q1 * (ax_plus_mx_bz + mz_bx + _4bx_bz * (half * sum_squares_minus_one + q3q3))
+            - q2 * ay_plus_my_bz
+            + q3 * two
+                * (q1q1_plus_q2q2 * (T::one() + bz_bz) + mx_bx + bx_bx * (sum_squares_minus_one + q2q2_plus_q3q3));
+
+        let mut step = Quaternion { w: s0, x: s1, y: s2, z: s3 };
+        step.normalize();
+
+        let mut q_dot = q_dot(&self.q, gyro_rps);
+        q_dot -= step * self.beta;
+
+        // Update the orientation quaternion using simple Euler integration
+        self.q += q_dot * delta_t;
+
+        // Normalize the orientation quaternion
+        self.q.normalize();
+        self.q
+    }
 }
 
 #[cfg(any(debug_assertions, test))]
@@ -125,10 +224,14 @@ mod tests {
         let mut sensor_fusion = MadgwickFilterf32::default();
         let requires_initialization = MadgwickFilterf32::requires_initialization();
         assert_eq!(requires_initialization, true);
+
         sensor_fusion.set_beta(1.0);
+
         let delta_t: f32 = 0.0;
-        let imu_reading = ImuReading::default();
-        let orientation = sensor_fusion.update_orientation(imu_reading, delta_t);
+        let acc = Vector3df32::default();
+        let gyro_rps = Vector3df32::default();
+
+        let orientation = sensor_fusion.fuse_acc_gyro(acc, gyro_rps, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 })
     }
 }

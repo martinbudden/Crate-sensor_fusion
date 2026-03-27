@@ -1,4 +1,4 @@
-#![allow(unused)]
+//#![allow(unused)]
 
 use core::ops::{Add, Div, Mul, Sub};
 use num_traits::One;
@@ -9,15 +9,23 @@ pub trait SensorFusion<T> {
     fn requires_initialization() -> bool;
 
     fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T>;
-    fn fuse_acc_gyro_mag(&mut self, acc: Vector3d<T>, gyro: Vector3d<T>, mag: Vector3d<T>, delta_t: T) -> Quaternion<T>;
+    fn fuse_acc_gyro_mag(&mut self, acc: Vector3d<T>, gyro: Vector3d<T>, mag: Vector3d<T>, delta_t: T)
+    -> Quaternion<T>;
 }
 
+#[allow(unused)]
 pub trait SensorFusionf32 {
     fn set_free_parameters(&mut self, parameter0: f32, parameter1: f32);
     fn requires_initialization() -> bool;
 
     fn fuse_acc_gyro(&mut self, acc: Vector3df32, gyro_rps: Vector3df32, delta_t: f32) -> Quaternionf32;
-    fn fuse_acc_gyro_mag(&mut self, acc: Vector3df32, gyro: Vector3df32, mag: Vector3df32, delta_t: f32) -> Quaternionf32;
+    fn fuse_acc_gyro_mag(
+        &mut self,
+        acc: Vector3df32,
+        gyro: Vector3df32,
+        mag: Vector3df32,
+        delta_t: f32,
+    ) -> Quaternionf32;
 }
 
 pub trait FuseAccGyro<T> {
@@ -36,11 +44,9 @@ impl<T> FuseAccGyro<T> for (Vector3d<T>, Vector3d<T>) {
 impl<T> FuseAccGyroMag<T> for (Vector3d<T>, Vector3d<T>, Vector3d<T>) {
     fn fuse_acc_gyro_mag_using<F: SensorFusion<T>>(self, filter: &mut F, delta_t: T) -> Quaternion<T> {
         let (acc, gyro, mag) = self;
-        filter.fuse_acc_gyro_mag(acc, gyro, mag,delta_t)
+        filter.fuse_acc_gyro_mag(acc, gyro, mag, delta_t)
     }
 }
-
-
 
 /// Calculate quaternion derivative (dq/dt aka q_dot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
 pub fn q_dot<T>(q: &Quaternion<T>, gyro_rps: Vector3d<T>) -> Quaternion<T>
@@ -61,22 +67,28 @@ mod tests {
     use super::*;
     use vector_quaternion_matrix::Vector3df32;
 
+    #[allow(dead_code)]
     pub struct TestStruct;
     impl SensorFusion<f32> for TestStruct {
         fn set_free_parameters(&mut self, _parameter0: f32, _parameter1: f32) {}
         fn requires_initialization() -> bool {
             true
         }
-        fn fuse_acc_gyro(&mut self, _acc: Vector3df32, _gyro_rps: Vector3df32, _delta_t:f32) -> Quaternionf32 {
+        fn fuse_acc_gyro(&mut self, _acc: Vector3df32, _gyro_rps: Vector3df32, _delta_t: f32) -> Quaternionf32 {
             Quaternionf32::default()
         }
-        fn fuse_acc_gyro_mag(&mut self, acc: Vector3df32, gyro_rps: Vector3df32, _mag: Vector3df32, delta_t: f32) -> Quaternionf32 {
+        fn fuse_acc_gyro_mag(
+            &mut self,
+            acc: Vector3df32,
+            gyro_rps: Vector3df32,
+            _mag: Vector3df32,
+            delta_t: f32,
+        ) -> Quaternionf32 {
             self.fuse_acc_gyro(acc, gyro_rps, delta_t)
         }
     }
-    
 
-//    #[allow(dead_code)]
+    //    #[allow(dead_code)]
     #[test]
     fn sensor_fusion() {
         let mut test_struct: TestStruct = TestStruct {};
@@ -108,7 +120,7 @@ mod tests {
         let gyro_rps = Vector3df32::default();
 
         //let orientation = madgwick_filter.fuse_acc_gyro(acc, gyro_rps, delta_t);
-        let orientation = (acc, gyro_rps).fuse_acc_gyro_using(& mut madgwick_filter, delta_t);
+        let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick_filter, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 })
     }
 }

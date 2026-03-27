@@ -80,7 +80,13 @@ where
         self.q
     }
 
-    fn fuse_acc_gyro_mag(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, _mag: Vector3d<T>, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro_mag(
+        &mut self,
+        acc: Vector3d<T>,
+        gyro_rps: Vector3d<T>,
+        _mag: Vector3d<T>,
+        delta_t: T,
+    ) -> Quaternion<T> {
         self.fuse_acc_gyro(acc, gyro_rps, delta_t)
     }
 }

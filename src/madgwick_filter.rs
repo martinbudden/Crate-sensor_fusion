@@ -144,51 +144,53 @@ where
 
         // Reference direction of Earth's magnetic field
         let two = T::one() + T::one();
-        let hx = m.x * (q0q0 + q1q1 - q2q2_plus_q3q3) + two * (m.y * (q1q2 - q0q3) + m.z * (q0q2 + q1q3));
-        let hy = two * (m.x * (q0q3 + q1q2) + m.y * (q0q0 - q1q1 + q2q2 - q3q3) + m.z * (q2q3 - q0q1));
+        let h = Vector3d {
+            x: m.x * (q0q0 + q1q1 - q2q2_plus_q3q3) + two * (m.y * (q1q2 - q0q3) + m.z * (q0q2 + q1q3)),
+            y: two * (m.x * (q0q3 + q1q2) + m.y * (q0q0 - q1q1 + q2q2 - q3q3) + m.z * (q2q3 - q0q1)),
+            z: T::zero(),
+        };
 
-        let bx_bx = hx * hx + hy * hy;
-        let bx = bx_bx.sqrt();
-        let bz = two * (m.x * (q1q3 - q0q2) + m.y * (q0q1 + q2q3)) + m.z * (q0q0 - q1q1_plus_q2q2 + q3q3);
-        let bz_bz = bz * bz;
-        let _4bx_bz = two * two * bx * bz;
+        let bx_bx = h.x * h.x + h.y * h.y;
+        let b = Vector3d {
+            x: bx_bx.sqrt(),
+            y: T::zero(),
+            z: two * (m.x * (q1q3 - q0q2) + m.y * (q0q1 + q2q3)) + m.z * (q0q0 - q1q1_plus_q2q2 + q3q3),
+        };
 
-        let mx_bx = m.x * bx;
-        let my_bx = m.y * bx;
-        let mz_bx = m.z * bx;
-        let mz_bz = m.z * bz;
+        let a_dash = Vector3d { x: a.x + m.x * b.z, y: a.y + m.y * b.z, z: T::zero() };
+        let bz_bz = b.z * b.z;
+        let _4bx_bz = two * two * b.x * b.z;
 
-        let ax_plus_mx_bz = a.x + m.x * bz;
-        let ay_plus_my_bz = a.y + m.y * bz;
+        let m_bx = m * b.x;
+        let mz_bz = m.z * b.z;
 
         let sum_squares_minus_one = q0q0 + q1q1_plus_q2q2 + q3q3 - T::one();
         let common = sum_squares_minus_one + q1q1_plus_q2q2 + a.z;
 
         let half = T::one() / two;
         // Gradient decent algorithm corrective step
-        let s0 = q0 * two * (q1q1_plus_q2q2 * (T::one() + bz_bz) + bx_bx * q2q2_plus_q3q3) - q1 * ay_plus_my_bz
-            + q2 * (ax_plus_mx_bz - mz_bx)
-            + q3 * (my_bx - _4bx_bz * q0q1);
+        let s0 = q0 * two * (q1q1_plus_q2q2 * (T::one() + bz_bz) + bx_bx * q2q2_plus_q3q3) - q1 * a_dash.y
+            + q2 * (a_dash.x - m_bx.z)
+            + q3 * (m_bx.y - _4bx_bz * q0q1);
 
-        let s1 = -q0 * ay_plus_my_bz
+        let s1 = -q0 * a_dash.y
             + q1 * two * (common + mz_bz + bx_bx * q2q2_plus_q3q3 + bz_bz * (sum_squares_minus_one + q1q1_plus_q2q2))
-            - q2 * my_bx
-            - q3 * (ax_plus_mx_bz + mz_bx + _4bx_bz * (half * sum_squares_minus_one + q1q1));
+            - q2 * m_bx.y
+            - q3 * (a_dash.x + m_bx.z + _4bx_bz * (half * sum_squares_minus_one + q1q1));
 
-        let s2 = q0 * (ax_plus_mx_bz - mz_bx) - q1 * my_bx
+        let s2 = q0 * (a_dash.x - m_bx.z) - q1 * m_bx.y
             + q2 * two
                 * (common
                     + mz_bz
-                    + mx_bx
+                    + m_bx.x
                     + bx_bx * (sum_squares_minus_one + q2q2_plus_q3q3)
                     + bz_bz * (sum_squares_minus_one + q1q1_plus_q2q2))
-            - q3 * (ay_plus_my_bz + _4bx_bz * q1q2);
+            - q3 * (a_dash.y + _4bx_bz * q1q2);
 
-        let s3 = q0 * my_bx
-            - q1 * (ax_plus_mx_bz + mz_bx + _4bx_bz * (half * sum_squares_minus_one + q3q3))
-            - q2 * ay_plus_my_bz
-            + q3 * two
-                * (q1q1_plus_q2q2 * (T::one() + bz_bz) + mx_bx + bx_bx * (sum_squares_minus_one + q2q2_plus_q3q3));
+        let s3 =
+            q0 * m_bx.y - q1 * (a_dash.x + m_bx.z + _4bx_bz * (half * sum_squares_minus_one + q3q3)) - q2 * a_dash.y
+                + q3 * two
+                    * (q1q1_plus_q2q2 * (T::one() + bz_bz) + m_bx.x + bx_bx * (sum_squares_minus_one + q2q2_plus_q3q3));
 
         let mut step = Quaternion { w: s0, x: s1, y: s2, z: s3 };
         step.normalize();

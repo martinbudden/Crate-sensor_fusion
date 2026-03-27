@@ -3,7 +3,21 @@
 use core::ops::{Add, Div, Mul, Sub};
 use num_traits::One;
 use vector_quaternion_matrix::{Quaternion, Quaternionf32, Vector3d, Vector3df32};
+
 /// A generic interface for any sensor fusion filter (Madgwick, Mahony, etc.)
+/// ```
+/// use vector_quaternion_matrix::{Vector3df32,Quaternionf32};
+/// use sensor_fusion::{MadgwickFilterf32,SensorFusion};
+/// 
+/// let mut madgwick_filter = MadgwickFilterf32::default();
+///
+/// let delta_t: f32 = 0.0;
+/// let acc = Vector3df32::default();
+/// let gyro_rps = Vector3df32::default();
+///
+/// let orientation = madgwick_filter.fuse_acc_gyro(acc, gyro_rps, delta_t);
+/// assert_eq!(orientation, Quaternionf32 { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });
+/// ```
 pub trait SensorFusion<T> {
     fn set_free_parameters(&mut self, parameter0: T, parameter1: T);
     fn requires_initialization() -> bool;
@@ -28,11 +42,22 @@ pub trait SensorFusionf32 {
     ) -> Quaternionf32;
 }
 
+/// Implements method call syntax for a sensor fusion filter
+/// ```
+/// use vector_quaternion_matrix::{Vector3df32,Quaternionf32};
+/// use sensor_fusion::{MadgwickFilterf32,SensorFusion,FuseAccGyro};
+
+/// let mut madgwick_filter = MadgwickFilterf32::default();
+///
+/// let delta_t: f32 = 0.0;
+/// let acc = Vector3df32::default();
+/// let gyro_rps = Vector3df32::default();
+///
+/// let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick_filter, delta_t);
+/// assert_eq!(orientation, Quaternionf32 { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });
+/// ```
 pub trait FuseAccGyro<T> {
     fn fuse_acc_gyro_using<F: SensorFusion<T>>(self, filter: &mut F, delta_t: T) -> Quaternion<T>;
-}
-pub trait FuseAccGyroMag<T> {
-    fn fuse_acc_gyro_mag_using<F: SensorFusion<T>>(self, filter: &mut F, delta_t: T) -> Quaternion<T>;
 }
 
 impl<T> FuseAccGyro<T> for (Vector3d<T>, Vector3d<T>) {
@@ -41,10 +66,15 @@ impl<T> FuseAccGyro<T> for (Vector3d<T>, Vector3d<T>) {
         filter.fuse_acc_gyro(acc, gyro, delta_t)
     }
 }
+
+pub trait FuseAccGyroMag<T> {
+    fn fuse_acc_gyro_mag_using<F: SensorFusion<T>>(self, sensor_fusion_filter: &mut F, delta_t: T) -> Quaternion<T>;
+}
+
 impl<T> FuseAccGyroMag<T> for (Vector3d<T>, Vector3d<T>, Vector3d<T>) {
-    fn fuse_acc_gyro_mag_using<F: SensorFusion<T>>(self, filter: &mut F, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro_mag_using<F: SensorFusion<T>>(self, sensor_fusion_filter: &mut F, delta_t: T) -> Quaternion<T> {
         let (acc, gyro, mag) = self;
-        filter.fuse_acc_gyro_mag(acc, gyro, mag, delta_t)
+        sensor_fusion_filter.fuse_acc_gyro_mag(acc, gyro, mag, delta_t)
     }
 }
 

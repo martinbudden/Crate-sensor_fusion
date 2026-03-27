@@ -56,6 +56,7 @@ where
         false
     }
 
+    /// Fuses accelerometer and gyroscope readings to give the orientation quaternion.
     fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
         // Calculate quaternion derivative (qDot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
         // Twice the actual value is used to reduce the number of multiplications needed

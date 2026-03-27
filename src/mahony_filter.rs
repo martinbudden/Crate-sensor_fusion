@@ -75,6 +75,7 @@ where
         true
     }
 
+    /// Fuses accelerometer and gyroscope readings to give the orientation quaternion.
     fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
         // Normalize acceleration
         let acc = acc.normalized();

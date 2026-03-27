@@ -62,6 +62,7 @@ where
         true
     }
 
+    /// Fuses accelerometer and gyroscope readings to give the orientation quaternion.
     fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
         // Calculate quaternion derivative (q_dot, aka dq/dt) from the angular rate
         let mut q_dot = q_dot(&self.q, gyro_rps);
@@ -105,6 +106,7 @@ where
         self.q.normalized()
     }
 
+    /// Fuses accelerometer, gyroscope, and magnetometer readings to give the orientation quaternion.
     fn fuse_acc_gyro_mag(
         &mut self,
         acc: Vector3d<T>,
@@ -211,6 +213,8 @@ where
 #[cfg(any(debug_assertions, test))]
 mod tests {
     #![allow(unused)]
+    use crate::FuseAccGyro;
+
     use super::*;
     use imu_sensors::ImuReadingf32;
     use vector_quaternion_matrix::{Quaternionf32, Vector3df32};
@@ -235,6 +239,17 @@ mod tests {
         let gyro_rps = Vector3df32::default();
 
         let orientation = madgwick_filter.fuse_acc_gyro(acc, gyro_rps, delta_t);
-        assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 })
+        assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });
+    }
+    #[test]
+    fn fuse_acc_gyro_using() {
+        let mut madgwick_filter = MadgwickFilterf32::default();
+
+        let delta_t: f32 = 0.0;
+        let acc = Vector3df32::default();
+        let gyro_rps = Vector3df32::default();
+
+        let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick_filter, delta_t);
+        assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });
     }
 }

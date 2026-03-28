@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Martin Budden"]
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "katex-header.html"]
 
 [dependencies]
 vector-quaternion-matrix = { git = "https://github.com/martinbudden/Crate-vector_quaternion_matrix" }

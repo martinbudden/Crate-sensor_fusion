@@ -8,7 +8,7 @@ use vector_quaternion_matrix::{Quaternion, Quaternionf32, Vector3d, Vector3df32}
 /// ```
 /// use vector_quaternion_matrix::{Vector3df32,Quaternionf32};
 /// use sensor_fusion::{MadgwickFilterf32,SensorFusion};
-/// 
+///
 /// let mut madgwick_filter = MadgwickFilterf32::default();
 ///
 /// let delta_t: f32 = 0.0;
@@ -46,7 +46,7 @@ pub trait SensorFusionf32 {
 /// ```
 /// use vector_quaternion_matrix::{Vector3df32,Quaternionf32};
 /// use sensor_fusion::{MadgwickFilterf32,SensorFusion,FuseAccGyro};
-
+///
 /// let mut madgwick_filter = MadgwickFilterf32::default();
 ///
 /// let delta_t: f32 = 0.0;
@@ -78,7 +78,7 @@ impl<T> FuseAccGyroMag<T> for (Vector3d<T>, Vector3d<T>, Vector3d<T>) {
     }
 }
 
-/// Calculate quaternion derivative (dq/dt aka q_dot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
+/// Calculate quaternion derivative (dq/dt aka q_dot) from angular rate <https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative>
 pub fn q_dot<T>(q: &Quaternion<T>, gyro_rps: Vector3d<T>) -> Quaternion<T>
 where
     T: Copy + One + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T>,

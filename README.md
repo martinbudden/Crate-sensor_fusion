@@ -21,15 +21,15 @@ Here's a simple example that calculates the orientation by fusing accelerometer 
 
 ```rust
 use sensor_fusion::{MadgwickFilterf32, SensorFusion};
-use vqm::Vector3df32;
+use vqm::Vector3f32;
 
 fn main() {
     let mut madgwick = MadgwickFilterf32::new();
     let dt = 0.001; // 1 millisecond
 
     // Mock sensor values, gyro converted to rps (values normally read from IMU).
-    let gyro_rps = Vector3df32::new(90.0, 8.0, 10.0).to_radians();
-    let acc = Vector3df32::new(0.1, 0.2, 0.9);
+    let gyro_rps = Vector3f32::new(90.0, 8.0, 10.0).to_radians();
+    let acc = Vector3f32::new(0.1, 0.2, 0.9);
 
     // Fuse acc and gyro values
     let orientation = madgwick.fuse_acc_gyro(acc, gyro_rps, dt);
@@ -116,7 +116,7 @@ using a PID controller) needs to run in 125 microseconds. This is currently look
 // total:
 //      54 arithmetic operations (35 multiplications, 19 additions/subtractions)
 //
-fn madgwick_step(q: Quaternionf32, a: Vector3df32) -> Quaternionf32 {
+fn madgwick_step(q: Quaternionf32, a: Vector3f32) -> Quaternionf32 {
     let M = Matrix4x4f32::new( // 10 multiplications
         -2.0*q.x, 2.0*q.w,      0.0, 0.0,
          2.0*q.y, 2.0*q.z, -4.0*q.w, 0.0,
@@ -124,7 +124,7 @@ fn madgwick_step(q: Quaternionf32, a: Vector3df32) -> Quaternionf32 {
          2.0*q.w, 2.0*q.x,      0.0, 0.0
     );
 
-    let v = Vector4df32::new( // 9 multiplications, 7 additions/subtractions
+    let v = Vector4f32::new( // 9 multiplications, 7 additions/subtractions
         2.0*(      q.w*q.y - q.z*q.x) - a.x,
         2.0*(      q.z*q.w + q.x*q.y) - a.y,
         2.0*(0.5 - q.w*q.w - q.x*q.x) - a.z,
@@ -143,8 +143,8 @@ fn madgwick_step(q: Quaternionf32, a: Vector3df32) -> Quaternionf32 {
 // when converted to SIMD this becomes:
 //      16 operations (7 multiplications, 4 additions, 3 vector multiplications, 2 vector additions)
 //
-# use vqm::{Quaternionf32, Vector3df32};
-fn madgwick_step(q: Quaternionf32, a: Vector3df32) -> Quaternionf32 {
+# use vqm::{Quaternionf32, Vector3f32};
+fn madgwick_step(q: Quaternionf32, a: Vector3f32) -> Quaternionf32 {
     let wz_common = 2.0 * (q.x * q.x + q.y * q.y); // 3 multiplications, 1 addition
     let xy_common = 2.0 * (q.w * q.w + q.z * q.z - 1.0 + 2.0 * wz_common + a.z); // 4 multiplications, 3 additions/subtractions
 

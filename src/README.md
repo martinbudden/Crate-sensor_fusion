@@ -14,7 +14,7 @@ The filter tracks a 9-dimensional kinematic state vector split into three 3D spa
          ⎣ IMU Bias  (x, y, z) ⎦
 ```
 
-In code, this mapping is managed via zero-cost abstractions by destructuring `Vector3df32` structures.
+In code, this mapping is managed via zero-cost abstractions by destructuring `Vector3f32` structures.
 
 ## 2. System Architecture: Asynchronous Multi-Sensor Execution Loop
 

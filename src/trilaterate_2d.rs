@@ -1,6 +1,6 @@
 use core::ops::{Add, AddAssign};
 use num_traits::float::FloatCore;
-use vqm::{Matrix2x2, Vector2d};
+use vqm::{Matrix2x2, Vector2};
 
 /// 2-dimensional anchor of `f32` values<br><br>
 pub type Anchor2df32 = Anchor2d<f32>;
@@ -11,7 +11,7 @@ pub type Anchor2df64 = Anchor2d<f64>;
 #[cfg_attr(feature = "std", derive(derive_more::Display))]
 #[cfg_attr(feature = "std", display("V{{x:{x}, y:{y}}}"))]
 pub struct Anchor2d<T> {
-    pub pos: Vector2d<T>,
+    pub pos: Vector2<T>,
     pub distance: T,
 }
 
@@ -31,13 +31,13 @@ where
     /// Constructor.
     #[must_use]
     pub fn new(x: T, y: T) -> Self {
-        Anchor2d { pos: Vector2d { x, y }, distance: T::zero() }
+        Anchor2d { pos: Vector2 { x, y }, distance: T::zero() }
     }
 }
 
 /// Trilaterates a 2d position using the least squares method.
 #[must_use]
-pub fn trilaterate_2d<T>(anchors: &[Anchor2d<T>]) -> Option<Vector2d<T>>
+pub fn trilaterate_2d<T>(anchors: &[Anchor2d<T>]) -> Option<Vector2<T>>
 where
     T: Default + FloatCore + Add<T, Output = T> + AddAssign + vqm::Matrix2x2Math,
 {
@@ -69,7 +69,7 @@ where
     let mut ata_11 = T::zero();
 
     // Initialize the 2x1 vector (atb)
-    let mut atb = Vector2d::default();
+    let mut atb = Vector2::default();
 
     // Accumulate all rows, skipping the base anchor
     for (ii, anchor) in anchors.iter().enumerate() {

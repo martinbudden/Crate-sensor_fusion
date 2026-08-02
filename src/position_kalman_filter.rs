@@ -1,4 +1,4 @@
-use vqm::{Matrix3x3f32, Matrix9x9f32, Vector3df32};
+use vqm::{Matrix3x3f32, Matrix9x9f32, Vector3f32};
 
 use crate::KalmanStateVector9f32;
 
@@ -24,11 +24,11 @@ pub type PositionKalmanFilterf32 = PositionKalmanFilter;
 pub struct PositionKalmanFilter {
     // 3D Kinematic State Vectors
     /// Position (x, y, z).
-    pub pos: Vector3df32,
+    pub pos: Vector3f32,
     /// Velocity (x, y, z).
-    pub vel: Vector3df32,
+    pub vel: Vector3f32,
     /// Accelerometer Bias (x, y, z).
-    pub acc_bias: Vector3df32,
+    pub acc_bias: Vector3f32,
 
     /// Predicted System Uncertainty Covariance Matrix (P).
     pub P: Matrix9x9f32,
@@ -49,7 +49,7 @@ pub struct PositionKalmanFilter {
     /// Absolute Measurement Noise variance for rangefinder.
     pub r_rangefinder: f32,
     /// Absolute Measurement Noise variance for optical flow.
-    pub r_optical_flow: Vector3df32,
+    pub r_optical_flow: Vector3f32,
 }
 
 impl Default for PositionKalmanFilter {
@@ -72,16 +72,16 @@ impl PositionKalmanFilter {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            pos: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
-            vel: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
-            acc_bias: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             q_velocity: 0.0,
             q_bias: 0.0,
             r_gps_horizontal: 0.0,
             r_gps_vertical: 0.0,
             r_barometer: 0.0,
             r_rangefinder: 0.0,
-            r_optical_flow: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             E: Matrix9x9f32::new([0.0; 81]),
             P: Matrix9x9f32::new([0.0; 81]),
         }
@@ -101,8 +101,8 @@ impl PositionKalmanFilter {
     /// pos_k = pos_k₋₁ + vel_k₋₁ * dT + 0.5 * acc_true * dT²
     /// vel_k = vel_k₋₁ + acc_true * dT
     /// ```
-    pub fn predict_states(&mut self, acc_measurement: Vector3df32, dt: f32) {
-        let gravity = Vector3df32 { x: 0.0, y: 0.0, z: 9.80665 };
+    pub fn predict_states(&mut self, acc_measurement: Vector3f32, dt: f32) {
+        let gravity = Vector3f32 { x: 0.0, y: 0.0, z: 9.80665 };
 
         // Calculate true physical acceleration by removing bias and adding gravity
         let acc_true = acc_measurement - self.acc_bias - gravity;
@@ -318,10 +318,10 @@ impl PositionKalmanFilter {
     ///
     /// Layouts:
     /// * self.P: 9x9 Column-Major Covariance Matrix
-    /// * position: Vector3df32 observation `[z_x, z_y, z_z]`
-    /// * R: Vector3df32 diagonal measurement noise variance [R.x, R.y, R.z]
+    /// * position: Vector3f32 observation `[z_x, z_y, z_z]`
+    /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
     #[allow(non_snake_case)]
-    pub fn correct_position(&mut self, position: Vector3df32, R: Vector3df32) {
+    pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
         // Extract the PositionPosition 3x3 sub-matrix from the top-left of the 9x9 P matrix.
         let mut P_pos = Matrix3x3f32::from(self.P);
 
@@ -361,13 +361,13 @@ impl PositionKalmanFilter {
     }
 
     /// Phase 2: Correct position using GPS position measurement (typically at a 1Hz to 10Hz rate).
-    pub fn correct_position_using_gps(&mut self, position: Vector3df32) {
-        let r_gps = Vector3df32 { x: self.r_gps_horizontal, y: self.r_gps_horizontal, z: self.r_gps_vertical };
+    pub fn correct_position_using_gps(&mut self, position: Vector3f32) {
+        let r_gps = Vector3f32 { x: self.r_gps_horizontal, y: self.r_gps_horizontal, z: self.r_gps_vertical };
         self.correct_position(position, r_gps);
     }
 
     /// Phase 2: Correct position using optical flow position measurement.
-    pub fn correct_position_using_optical_flow(&mut self, position: Vector3df32) {
+    pub fn correct_position_using_optical_flow(&mut self, position: Vector3f32) {
         self.correct_position(position, self.r_optical_flow);
     }
 
@@ -445,7 +445,7 @@ impl PositionKalmanFilter {
     /// * self.P: 9x9 Column-Major Covariance Matrix
     /// * `KH_P`: 9x9 Column-Major Matrix from `reassemble_k_matrices`
     /// * `K_pos`, `K_vel`, `K_acc_bias`: 3x3 Column-Major Kalman Gain blocks
-    /// * R: Vector3df32 diagonal measurement noise variance [R.x, R.y, R.z]
+    /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
     #[allow(non_snake_case)]
     #[rustfmt::skip]
     pub fn joseph_covariance_update(
@@ -454,7 +454,7 @@ impl PositionKalmanFilter {
         K_pos: &Matrix3x3f32,
         K_vel: &Matrix3x3f32,
         K_acc_bias: &Matrix3x3f32,
-        R: Vector3df32,
+        R: Vector3f32,
     ) {
         // =====================================================================
         // Cache all Kalman gain columns for the KRKᵀ outer product
@@ -517,7 +517,7 @@ impl PositionKalmanFilter {
                 // Calculate the core M * (I - KH)ᵀ element value
                 let mut p_updated = M_col[r] - (m0[r] * kh0 + m1[r] * kh1 + m2[r] * kh2);
 
-                // Add the additive noise vector components using explicit field names from Vector3df32
+                // Add the additive noise vector components using explicit field names from Vector3f32
                 p_updated += K_col0[r] * R.x * K_col0[r]
                            + K_col1[r] * R.y * K_col1[r]
                            + K_col2[r] * R.z * K_col2[r];
@@ -541,7 +541,7 @@ impl PositionKalmanFilter {
     /// * `gate_threshold`: Chi-squared limit (e.g., 7.815 for 3 DOF at 95% confidence)
     #[must_use]
     #[allow(non_snake_case)]
-    pub fn validate_measurement(&self, y: Vector3df32, R: Vector3df32, gate_threshold: f32) -> bool {
+    pub fn validate_measurement(&self, y: Vector3f32, R: Vector3f32, gate_threshold: f32) -> bool {
         // Collect the columns into an array using standard iteration.
         // Collecting exactly 3 items ensures we can pattern match them safely without using `unwrap`.
         let mut col_iter = self.P.iter_columns();

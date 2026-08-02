@@ -6,7 +6,7 @@ use rand::{RngExt, rng};
 use std::hint::black_box;
 
 use sensor_fusion::{ComplementaryFilterf32, FuseAccGyro, FuseAccGyroMag, MadgwickFilterf32, MahonyFilterf32};
-use vqm::Vector3df32;
+use vqm::Vector3f32;
 
 fn bench_filter(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter");
@@ -23,8 +23,8 @@ fn bench_filter(c: &mut Criterion) {
             || {
                 let a: [f32; 3] = rng().random();
                 let g: [f32; 3] = rng().random();
-                let acc = Vector3df32::from(a);
-                let gyro_rps = Vector3df32::from(g);
+                let acc = Vector3f32::from(a);
+                let gyro_rps = Vector3f32::from(g);
                 (acc, gyro_rps)
             },
             |(acc, gyro_rps)| {
@@ -40,9 +40,9 @@ fn bench_filter(c: &mut Criterion) {
                 let a: [f32; 3] = rng().random();
                 let g: [f32; 3] = rng().random();
                 let m: [f32; 3] = rng().random();
-                let acc = Vector3df32::from(a);
-                let gyro_rps = Vector3df32::from(g);
-                let mag = Vector3df32::from(m);
+                let acc = Vector3f32::from(a);
+                let gyro_rps = Vector3f32::from(g);
+                let mag = Vector3f32::from(m);
                 (acc, gyro_rps, mag)
             },
             |(acc, gyro_rps, mag)| {
@@ -58,8 +58,8 @@ fn bench_filter(c: &mut Criterion) {
             || {
                 let a: [f32; 3] = rng().random();
                 let g: [f32; 3] = rng().random();
-                let acc = Vector3df32::from(a);
-                let gyro_rps = Vector3df32::from(g);
+                let acc = Vector3f32::from(a);
+                let gyro_rps = Vector3f32::from(g);
                 (acc, gyro_rps)
             },
             |(acc, gyro_rps)| {
@@ -74,8 +74,8 @@ fn bench_filter(c: &mut Criterion) {
             || {
                 let a: [f32; 3] = rng().random();
                 let g: [f32; 3] = rng().random();
-                let acc = Vector3df32::from(a);
-                let gyro_rps = Vector3df32::from(g);
+                let acc = Vector3f32::from(a);
+                let gyro_rps = Vector3f32::from(g);
                 (acc, gyro_rps)
             },
             |(acc, gyro_rps)| {

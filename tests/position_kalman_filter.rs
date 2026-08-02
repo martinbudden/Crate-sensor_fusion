@@ -1,5 +1,5 @@
 use sensor_fusion::PositionKalmanFilter;
-use vqm::{Matrix9x9f32, Vector3df32};
+use vqm::{Matrix9x9f32, Vector3f32};
 
 #[cfg(test)]
 mod position_filter_tests {
@@ -23,9 +23,9 @@ mod position_filter_tests {
     fn test_barometer_measurement_update() {
         // Initialize a baseline filter instance with realistic test values
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32 { x: 10.0, y: 20.0, z: 100.0 }, // Initial Altitude is 100m
-            vel: Vector3df32 { x: 1.0, y: 2.0, z: 5.0 },     // Initial Vertical Velocity is 5m/s
-            acc_bias: Vector3df32 { x: 0.01, y: 0.02, z: 0.1 }, // Initial Vertical Bias is 0.1m/s²
+            pos: Vector3f32 { x: 10.0, y: 20.0, z: 100.0 }, // Initial Altitude is 100m
+            vel: Vector3f32 { x: 1.0, y: 2.0, z: 5.0 },     // Initial Vertical Velocity is 5m/s
+            acc_bias: Vector3f32 { x: 0.01, y: 0.02, z: 0.1 }, // Initial Vertical Bias is 0.1m/s²
 
             // Setting up a predictable diagonal P matrix
             P: Matrix9x9f32::new({
@@ -56,7 +56,7 @@ mod position_filter_tests {
             r_gps_vertical: 2.0,
             r_barometer: 4.0, // Measurement noise R = 4.0
             r_rangefinder: 0.0,
-            r_optical_flow: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Introduce an altitude measurement with a 10-meter error step
@@ -99,9 +99,9 @@ mod gps_filter_tests {
     fn test_gps_3d_measurement_update() {
         // Initialize a baseline filter instance with clean, predictable values
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32 { x: 10.0, y: 20.0, z: 30.0 },   // Initial Position (m)
-            vel: Vector3df32 { x: 1.0, y: 2.0, z: 3.0 },      // Initial Velocity (m/s)
-            acc_bias: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 }, // Initial Accelerometer Bias
+            pos: Vector3f32 { x: 10.0, y: 20.0, z: 30.0 },   // Initial Position (m)
+            vel: Vector3f32 { x: 1.0, y: 2.0, z: 3.0 },      // Initial Velocity (m/s)
+            acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, // Initial Accelerometer Bias
 
             // Setup a predictable P matrix layout
             // For educational clarity, we start with a clean diagonal covariance
@@ -136,13 +136,13 @@ mod gps_filter_tests {
             r_gps_vertical: 3.0,   // Vertical GPS noise covariance
             r_barometer: 1.0,
             r_rangefinder: 0.0,
-            r_optical_flow: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Introduce a 3D GPS packet with a specific translation step error
         // Innovation Error = GPS - Predicted = [14.0 - 10.0, 20.0 - 20.0, 36.0 - 30.0]
         //                  = [4.0, 0.0, 6.0]
-        let gps_reading = Vector3df32 { x: 14.0, y: 20.0, z: 36.0 };
+        let gps_reading = Vector3f32 { x: 14.0, y: 20.0, z: 36.0 };
 
         // Run the multidimensional update logic
         // Hand-calculating the top-left block behavior for verification:
@@ -181,9 +181,9 @@ mod gps_filter_tests {
     fn test_gps_3d_measurement_update_with_tuple_blocks() {
         // Initialize a baseline filter instance with predictable state variances
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32 { x: 10.0, y: 20.0, z: 30.0 },   // Initial Position (m)
-            vel: Vector3df32 { x: 1.0, y: 2.0, z: 3.0 },      // Initial Velocity (m/s)
-            acc_bias: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 }, // Initial Accelerometer Bias
+            pos: Vector3f32 { x: 10.0, y: 20.0, z: 30.0 },   // Initial Position (m)
+            vel: Vector3f32 { x: 1.0, y: 2.0, z: 3.0 },      // Initial Velocity (m/s)
+            acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, // Initial Accelerometer Bias
 
             // Setup a predictable, diagonal-dominated covariance baseline
             P: Matrix9x9f32::new({
@@ -217,13 +217,13 @@ mod gps_filter_tests {
             r_gps_vertical: 3.0,   // Vertical GPS noise covariance (R)
             r_barometer: 1.0,
             r_rangefinder: 0.0,
-            r_optical_flow: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Introduce a 3D GPS packet with a specific translation step error
         // Innovation Error = GPS - Predicted = [14.0 - 10.0, 20.0 - 20.0, 36.0 - 30.0]
         //                  = [4.0, 0.0, 6.0]
-        let gps_reading = Vector3df32 { x: 14.0, y: 20.0, z: 36.0 };
+        let gps_reading = Vector3f32 { x: 14.0, y: 20.0, z: 36.0 };
 
         // Run the refactored multidimensional update logic
         filter.correct_position_using_gps(gps_reading);
@@ -259,9 +259,9 @@ mod covariance_prediction_tests {
     fn test_covariance_time_propagation() {
         // Setup a filter with an initial error covariance matrix E
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32::default(),
-            vel: Vector3df32::default(),
-            acc_bias: Vector3df32::default(),
+            pos: Vector3f32::default(),
+            vel: Vector3f32::default(),
+            acc_bias: Vector3f32::default(),
             P: Matrix9x9f32::default(),
 
             // Give velocity a starting uncertainty of 4.0
@@ -276,7 +276,7 @@ mod covariance_prediction_tests {
             r_gps_vertical: 1.0,
             r_barometer: 1.0,
             r_rangefinder: 0.0,
-            r_optical_flow: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Propagate forward with a time step of dt = 0.5 seconds
@@ -345,9 +345,9 @@ mod matrix_9x9_validation_tests {
         // Initialize an E matrix completely packed with 1.0 elements.
         // This tests that our unrolled blocks accumulate every cross-term properly.
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32::default(),
-            vel: Vector3df32::default(),
-            acc_bias: Vector3df32::default(),
+            pos: Vector3f32::default(),
+            vel: Vector3f32::default(),
+            acc_bias: Vector3f32::default(),
             P: Matrix9x9f32::default(),
             E: Matrix9x9f32::new([1.0; 81]), // Every variance and covariance is 1.0
             q_velocity: 2.0,
@@ -356,7 +356,7 @@ mod matrix_9x9_validation_tests {
             r_gps_vertical: 1.0,
             r_barometer: 1.0,
             r_rangefinder: 1.0,
-            r_optical_flow: Vector3df32::default(),
+            r_optical_flow: Vector3f32::default(),
         };
 
         let dt = 0.5;

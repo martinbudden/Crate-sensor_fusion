@@ -2,7 +2,7 @@ use core::ops::Mul;
 
 use num_traits::Zero;
 
-use vqm::{Matrix9x9, Matrix9x9Math, Vector3d};
+use vqm::{Matrix9x9, Matrix9x9Math, Vector3};
 
 /// Kalman state vector of `f32` values<br>
 pub type KalmanStateVector9f32 = KalmanStateVector9<f32>;
@@ -14,9 +14,9 @@ pub type KalmanStateVector9f64 = KalmanStateVector9<f64>;
 #[repr(C, align(64))]
 #[allow(missing_docs)]
 pub struct KalmanStateVector9<T> {
-    pub pos: Vector3d<T>,
-    pub vel: Vector3d<T>,
-    pub bias: Vector3d<T>,
+    pub pos: Vector3<T>,
+    pub vel: Vector3<T>,
+    pub bias: Vector3<T>,
 }
 
 impl<T> KalmanStateVector9<T>
@@ -25,14 +25,14 @@ where
 {
     /// Constructor.
     #[inline]
-    pub const fn new(v: (Vector3d<T>, Vector3d<T>, Vector3d<T>)) -> Self {
+    pub const fn new(v: (Vector3<T>, Vector3<T>, Vector3<T>)) -> Self {
         Self { pos: v.0, vel: v.1, bias: v.2 }
     }
 }
 
-impl<T> From<(Vector3d<T>, Vector3d<T>, Vector3d<T>)> for KalmanStateVector9<T> {
+impl<T> From<(Vector3<T>, Vector3<T>, Vector3<T>)> for KalmanStateVector9<T> {
     #[inline]
-    fn from(v: (Vector3d<T>, Vector3d<T>, Vector3d<T>)) -> Self {
+    fn from(v: (Vector3<T>, Vector3<T>, Vector3<T>)) -> Self {
         Self { pos: v.0, vel: v.1, bias: v.2 }
     }
 }

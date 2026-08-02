@@ -4,26 +4,25 @@
 #[cfg(feature = "simd")]
 use core::simd::{f32x4, simd_swizzle};
 
-use vqm::{Quaternion, Vector3d};
+use vqm::{Quaternion, Vector3};
 
 /// Math functions for `SensorFusion`, using **SIMD** accelerations for `f32`.
 pub trait SensorFusionMath: Sized {
-    fn estimate_gravity(q: Quaternion<Self>) -> Vector3d<Self>;
-    fn derivative(q: Quaternion<Self>, gyro: Vector3d<Self>) -> Quaternion<Self>;
-    fn madgwick_step_acc(q: Quaternion<Self>, acc: Vector3d<Self>, max_acc_magnitude_squared: Self)
-    -> Quaternion<Self>;
+    fn estimate_gravity(q: Quaternion<Self>) -> Vector3<Self>;
+    fn derivative(q: Quaternion<Self>, gyro: Vector3<Self>) -> Quaternion<Self>;
+    fn madgwick_step_acc(q: Quaternion<Self>, acc: Vector3<Self>, max_acc_magnitude_squared: Self) -> Quaternion<Self>;
     fn madgwick_step_acc_mag(
         q: Quaternion<Self>,
-        acc: Vector3d<Self>,
-        mag: Vector3d<Self>,
+        acc: Vector3<Self>,
+        mag: Vector3<Self>,
         max_acc_magnitude_squared: Self,
     ) -> Quaternion<Self>;
 }
 
 impl SensorFusionMath for f32 {
     #[inline(always)]
-    fn estimate_gravity(q: Quaternion<Self>) -> Vector3d<Self> {
-        Vector3d {
+    fn estimate_gravity(q: Quaternion<Self>) -> Vector3<Self> {
+        Vector3 {
             x: 2.0 * (q.x * q.z - q.w * q.y),
             y: 2.0 * (q.y * q.z + q.w * q.x),
             z: q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z,
@@ -31,7 +30,7 @@ impl SensorFusionMath for f32 {
     }
 
     #[inline(always)]
-    fn derivative(q: Quaternion<Self>, gyro: Vector3d<Self>) -> Quaternion<Self> {
+    fn derivative(q: Quaternion<Self>, gyro: Vector3<Self>) -> Quaternion<Self> {
         #[cfg(feature = "simd")]
         {
             /*// Load q: [w, x, y, z]
@@ -121,11 +120,7 @@ impl SensorFusionMath for f32 {
     ///    meaning this whole function could resolve in under 15 clock cycles.
     ///
     #[inline(always)]
-    fn madgwick_step_acc(
-        q: Quaternion<Self>,
-        acc: Vector3d<Self>,
-        max_acc_magnitude_squared: Self,
-    ) -> Quaternion<Self> {
+    fn madgwick_step_acc(q: Quaternion<Self>, acc: Vector3<Self>, max_acc_magnitude_squared: Self) -> Quaternion<Self> {
         use num_traits::Zero;
         use vqm::SqrtMethods;
 
@@ -134,7 +129,7 @@ impl SensorFusionMath for f32 {
         // so exclude it from the calculation in these cases
         let mut a = acc;
         if acc_magnitude_squared > max_acc_magnitude_squared || acc_magnitude_squared == 0.0 {
-            a = Vector3d::zero();
+            a = Vector3::zero();
         } else {
             a *= acc_magnitude_squared.sqrt_reciprocal();
         }
@@ -187,8 +182,8 @@ impl SensorFusionMath for f32 {
     #[inline(always)]
     fn madgwick_step_acc_mag(
         q: Quaternion<Self>,
-        acc: Vector3d<Self>,
-        mag: Vector3d<Self>,
+        acc: Vector3<Self>,
+        mag: Vector3<Self>,
         max_acc_magnitude_squared: Self,
     ) -> Quaternion<Self> {
         use num_traits::Zero;
@@ -199,7 +194,7 @@ impl SensorFusionMath for f32 {
         // so exclude it from the calculation in these cases
         let mut a = acc;
         if acc_magnitude_squared > max_acc_magnitude_squared || acc_magnitude_squared == 0.0 {
-            a = Vector3d::zero();
+            a = Vector3::zero();
         } else {
             a *= acc_magnitude_squared.sqrt_reciprocal();
         }
@@ -227,20 +222,20 @@ impl SensorFusionMath for f32 {
         let q2q2_plus_q3q3 = q2q2 + q3q3;
 
         // Reference direction of Earth's magnetic field
-        let h = Vector3d {
+        let h = Vector3 {
             x: m.x * (q0q0 + q1q1 - q2q2_plus_q3q3) + 2.0 * (m.y * (q1q2 - q0q3) + m.z * (q0q2 + q1q3)),
             y: (m.x * (q0q3 + q1q2) + m.y * (q0q0 - q1q1 + q2q2 - q3q3) + m.z * (q2q3 - q0q1)) * 2.0,
             z: 0.0,
         };
 
         let bx_bx = h.x * h.x + h.y * h.y;
-        let b = Vector3d {
+        let b = Vector3 {
             x: bx_bx.sqrt(),
             y: 0.0,
             z: 2.0 * (m.x * (q1q3 - q0q2) + m.y * (q0q1 + q2q3)) + m.z * (q0q0 - q1q1_plus_q2q2 + q3q3),
         };
 
-        let a_dash = Vector3d { x: a.x + m.x * b.z, y: a.y + m.y * b.z, z: 0.0 };
+        let a_dash = Vector3 { x: a.x + m.x * b.z, y: a.y + m.y * b.z, z: 0.0 };
         let bz_bz = b.z * b.z;
         let _4bx_bz = 4.0 * b.x * b.z;
 
@@ -276,8 +271,8 @@ impl SensorFusionMath for f32 {
 
 impl SensorFusionMath for f64 {
     #[inline(always)]
-    fn estimate_gravity(q: Quaternion<Self>) -> Vector3d<Self> {
-        Vector3d {
+    fn estimate_gravity(q: Quaternion<Self>) -> Vector3<Self> {
+        Vector3 {
             x: 2.0 * (q.x * q.z - q.w * q.y),
             y: 2.0 * (q.y * q.z + q.w * q.x),
             z: q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z,
@@ -285,7 +280,7 @@ impl SensorFusionMath for f64 {
     }
 
     #[inline(always)]
-    fn derivative(q: Quaternion<Self>, gyro_rps: Vector3d<Self>) -> Quaternion<Self> {
+    fn derivative(q: Quaternion<Self>, gyro_rps: Vector3<Self>) -> Quaternion<Self> {
         Quaternion {
             w: (-q.x * gyro_rps.x - q.y * gyro_rps.y - q.z * gyro_rps.z) * 0.5,
             x: (q.w * gyro_rps.x + q.y * gyro_rps.z - q.z * gyro_rps.y) * 0.5,
@@ -295,11 +290,7 @@ impl SensorFusionMath for f64 {
     }
 
     #[inline(always)]
-    fn madgwick_step_acc(
-        q: Quaternion<Self>,
-        acc: Vector3d<Self>,
-        max_acc_magnitude_squared: Self,
-    ) -> Quaternion<Self> {
+    fn madgwick_step_acc(q: Quaternion<Self>, acc: Vector3<Self>, max_acc_magnitude_squared: Self) -> Quaternion<Self> {
         use num_traits::Zero;
         use vqm::SqrtMethods;
 
@@ -308,7 +299,7 @@ impl SensorFusionMath for f64 {
         // so exclude it from the calculation in these cases
         let mut a = acc;
         if acc_magnitude_squared > max_acc_magnitude_squared || acc_magnitude_squared == 0.0 {
-            a = Vector3d::zero();
+            a = Vector3::zero();
         } else {
             a *= acc_magnitude_squared.sqrt_reciprocal();
         }
@@ -326,8 +317,8 @@ impl SensorFusionMath for f64 {
     #[inline(always)]
     fn madgwick_step_acc_mag(
         q: Quaternion<Self>,
-        _acc: Vector3d<Self>,
-        _mag: Vector3d<Self>,
+        _acc: Vector3<Self>,
+        _mag: Vector3<Self>,
         _max_acc_magnitude_squared: Self,
     ) -> Quaternion<Self> {
         q

@@ -1,5 +1,5 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::{Matrix3x3, Matrix3x3Math, SqrtMethods, Vector3d};
+use vqm::{Matrix3x3, Matrix3x3Math, SqrtMethods, Vector3};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
 pub type AltitudeKalmanFilterf32 = AltitudeKalmanFilter<f32>;
@@ -27,8 +27,8 @@ impl AltitudeKalmanFilterConstants for f64 {
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AltitudeKalmanFilter<T> {
-    predicted: Vector3d<T>,
-    estimated: Vector3d<T>,
+    predicted: Vector3<T>,
+    estimated: Vector3<T>,
     beta: T,
     /// Predicted System Uncertainty Covariance Matrix (P).
     P: Matrix3x3<T>,
@@ -79,8 +79,8 @@ where
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            predicted: Vector3d::ZERO,
-            estimated: Vector3d::ZERO,
+            predicted: Vector3::ZERO,
+            estimated: Vector3::ZERO,
             beta: T::ZERO,
             q_velocity: Self::Q1,
             q_bias: Self::Q3,
@@ -122,8 +122,8 @@ where
         ]);
 
         Self {
-            estimated: Vector3d { x: T::ZERO, y: initial_altitude, z: T::ZERO },
-            predicted: Vector3d { x: T::ZERO, y: initial_altitude, z: T::ZERO },
+            estimated: Vector3 { x: T::ZERO, y: initial_altitude, z: T::ZERO },
+            predicted: Vector3 { x: T::ZERO, y: initial_altitude, z: T::ZERO },
             P: initial_covariance,
             E: initial_covariance,
             beta: T::ONE_TENTH, // Damping factor configuration baseline
@@ -159,11 +159,11 @@ where
     /// Call this at your IMU frequency or fixed control loop rate.
     #[allow(non_snake_case)]
     #[rustfmt::skip]
-    pub fn predict(&mut self, acceleration_measurement: T, delta_t: T) -> Vector3d<T> {
+    pub fn predict(&mut self, acceleration_measurement: T, delta_t: T) -> Vector3<T> {
         // States are a 3d vector with components: velocity, altitude, and bias.
         // Destructure the state vectors as references with meaningful names, for code legibility (Zero cost abstraction).
-        let Vector3d { x: estimated_velocity, y: estimated_altitude, z: estimated_bias } = self.estimated;
-        let Vector3d { x: ref mut predicted_velocity, y: ref mut predicted_altitude, z: ref mut predicted_bias } =
+        let Vector3 { x: estimated_velocity, y: estimated_altitude, z: estimated_bias } = self.estimated;
+        let Vector3 { x: ref mut predicted_velocity, y: ref mut predicted_altitude, z: ref mut predicted_bias } =
             self.predicted;
 
         // Kinematic Euler integration for velocity and altitude.
@@ -208,7 +208,7 @@ where
     pub fn correct_altitude(&mut self, altitude: T, R: T) {
         const M22: usize = 4;
         // H vector for altitude: [0, 1, 0]
-        let H_transpose = Vector3d { x: T::ZERO, y: T::ONE, z: T::ZERO };
+        let H_transpose = Vector3 { x: T::ZERO, y: T::ONE, z: T::ZERO };
 
         // Innovation covariance: S = H * P * H^T + R
         let S = self.P[M22] + R;
@@ -251,7 +251,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vqm::{Matrix3x3f32, Vector3df32};
+    use vqm::{Matrix3x3f32, Vector3f32};
 
     fn _is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn kalman_covariance_update() {
         // Initialize the Kalman Gain vector (K)
-        let k = Vector3df32 { x: 3.0, y: 7.0, z: 13.0 };
+        let k = Vector3f32 { x: 3.0, y: 7.0, z: 13.0 };
 
         // Initialize a starting Covariance Matrix (P)
         // We set the 2nd row to [2.0, 5.0, 11.0] to match our proven outer product values
@@ -281,7 +281,7 @@ mod tests {
 
         // Extract altitude row from the P matrix
         let altitude_row = p.row(AltitudeKalmanFilterf32::ALTITUDE_ROW);
-        assert_eq!(Vector3df32 { x: 2.0, y: 5.0, z: 11.0 }, altitude_row);
+        assert_eq!(Vector3f32 { x: 2.0, y: 5.0, z: 11.0 }, altitude_row);
 
         // Calculate the updated Covariance Matrix (E).
         let kh_p = k.outer_product(altitude_row);

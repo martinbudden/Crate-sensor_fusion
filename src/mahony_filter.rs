@@ -1,7 +1,7 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
 
 use crate::{SensorFusion, SensorFusionMath};
-use vqm::{MathConstants, Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3d};
+use vqm::{MathConstants, Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3};
 
 /// Mahony filter for `f32`<br>
 pub type MahonyFilterf32 = MahonyFilter<f32>;
@@ -15,9 +15,9 @@ pub struct MahonyFilter<T> {
     q: Quaternion<T>,
     kp: T,
     ki: T,
-    error_integral: Vector3d<T>,
-    gyro_rps_1: Vector3d<T>,
-    gyro_rps_2: Vector3d<T>,
+    error_integral: Vector3<T>,
+    gyro_rps_1: Vector3<T>,
+    gyro_rps_2: Vector3<T>,
     use_quadratic_interpolation: bool,
     use_matrix_exponential_approximation: bool,
 }
@@ -42,9 +42,9 @@ where
             q: Quaternion { w: T::ONE, x: T::ZERO, y: T::ZERO, z: T::ZERO },
             kp: T::TEN,
             ki: T::ZERO,
-            error_integral: Vector3d { x: T::ZERO, y: T::ZERO, z: T::ZERO },
-            gyro_rps_1: Vector3d { x: T::ZERO, y: T::ZERO, z: T::ZERO },
-            gyro_rps_2: Vector3d { x: T::ZERO, y: T::ZERO, z: T::ZERO },
+            error_integral: Vector3 { x: T::ZERO, y: T::ZERO, z: T::ZERO },
+            gyro_rps_1: Vector3 { x: T::ZERO, y: T::ZERO, z: T::ZERO },
+            gyro_rps_2: Vector3 { x: T::ZERO, y: T::ZERO, z: T::ZERO },
             use_quadratic_interpolation: false,
             use_matrix_exponential_approximation: false,
         }
@@ -76,7 +76,7 @@ where
     }
 
     /// Fuses accelerometer and gyroscope readings to give the orientation quaternion.
-    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro(&mut self, acc: Vector3<T>, gyro_rps: Vector3<T>, delta_t: T) -> Quaternion<T> {
         // Normalize acceleration
         let acc = acc.normalize();
 
@@ -127,9 +127,9 @@ where
 
     fn fuse_acc_gyro_mag(
         &mut self,
-        acc: Vector3d<T>,
-        gyro_rps: Vector3d<T>,
-        _mag: Vector3d<T>,
+        acc: Vector3<T>,
+        gyro_rps: Vector3<T>,
+        _mag: Vector3<T>,
         delta_t: T,
     ) -> Quaternion<T> {
         self.fuse_acc_gyro(acc, gyro_rps, delta_t)
@@ -144,7 +144,7 @@ where
 mod tests {
     #![allow(unused)]
     use super::*;
-    use vqm::Vector3df32;
+    use vqm::Vector3f32;
 
     fn _is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
@@ -163,8 +163,8 @@ mod tests {
         sensor_fusion.set_proportional_integral(10.0, 0.0);
 
         let delta_t: f32 = 0.0;
-        let acc = Vector3df32::default();
-        let gyro_rps = Vector3df32::default();
+        let acc = Vector3f32::default();
+        let gyro_rps = Vector3f32::default();
 
         let orientation = sensor_fusion.fuse_acc_gyro(acc, gyro_rps, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });

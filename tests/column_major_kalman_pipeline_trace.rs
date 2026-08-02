@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use sensor_fusion::PositionKalmanFilter;
-    use vqm::{Matrix9x9f32, Vector3df32};
+    use vqm::{Matrix9x9f32, Vector3f32};
 
     /// Helper to verify a column-major Matrix9x9 is perfectly symmetric.
     /// In column-major layout, P[(col * 9) + row] must equal P[(row * 9) + col].
@@ -64,9 +64,9 @@ mod tests {
 
         // Instantiate actual filter structure with real hyperparameters
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32 { x: 0.0, y: 0.0, z: 10.0 }, // 10m Altitude
-            vel: Vector3df32 { x: 0.0, y: 0.0, z: 2.0 },  // 2 m/s ascending
-            acc_bias: Vector3df32 { x: 0.01, y: -0.01, z: 0.0 },
+            pos: Vector3f32 { x: 0.0, y: 0.0, z: 10.0 }, // 10m Altitude
+            vel: Vector3f32 { x: 0.0, y: 0.0, z: 2.0 },  // 2 m/s ascending
+            acc_bias: Vector3f32 { x: 0.01, y: -0.01, z: 0.0 },
             P: initial_P,
             E: Matrix9x9f32::default(),
             q_velocity: 0.05,
@@ -75,7 +75,7 @@ mod tests {
             r_gps_vertical: 0.05,
             r_barometer: 0.1,
             r_rangefinder: 0.01,
-            r_optical_flow: Vector3df32 { x: 0.05, y: 0.05, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.05, y: 0.05, z: 0.0 },
         };
 
         let dt = 0.01; // 100Hz IMU loop stride
@@ -105,9 +105,9 @@ mod tests {
         }
 
         // Test measurement observation mechanics
-        let y_innovation = Vector3df32 { x: 0.1, y: -0.05, z: 0.02 };
+        let y_innovation = Vector3f32 { x: 0.1, y: -0.05, z: 0.02 };
         let R_gps_noise =
-            Vector3df32 { x: filter.r_gps_horizontal, y: filter.r_gps_horizontal, z: filter.r_gps_vertical };
+            Vector3f32 { x: filter.r_gps_horizontal, y: filter.r_gps_horizontal, z: filter.r_gps_vertical };
 
         // Ensure validate_measurement hooks up correctly using the real filter instance parameters
         let is_valid = filter.validate_measurement(y_innovation, R_gps_noise, 7.815);
@@ -118,7 +118,7 @@ mod tests {
 #[cfg(test)]
 mod correction_tests {
     use sensor_fusion::PositionKalmanFilter;
-    use vqm::{Matrix9x9f32, Vector3df32};
+    use vqm::{Matrix9x9f32, Vector3f32};
 
     fn get_diagonal(matrix: &Matrix9x9f32) -> [f32; 9] {
         let mut diag = [0.0f32; 9];
@@ -152,9 +152,9 @@ mod correction_tests {
         }
 
         let mut filter = PositionKalmanFilter {
-            pos: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
-            vel: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
-            acc_bias: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 },
+            pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             P: initial_P,
             E: Matrix9x9f32::default(),
             q_velocity: 0.05,
@@ -163,7 +163,7 @@ mod correction_tests {
             r_gps_vertical: 0.09,
             r_barometer: 0.25,
             r_rangefinder: 0.01,
-            r_optical_flow: Vector3df32 { x: 0.04, y: 0.04, z: 0.0 },
+            r_optical_flow: Vector3f32 { x: 0.04, y: 0.04, z: 0.0 },
         };
 
         println!("\n====================================================");

@@ -1,5 +1,5 @@
 use num_traits::float::FloatCore;
-use vqm::{Matrix3x3f32, Vector3d, Vector3df32};
+use vqm::{Matrix3x3f32, Vector3, Vector3f32};
 
 /// 3-dimensional anchor of `f32` values<br><br>
 pub type Anchor3df32 = Anchor3d<f32>;
@@ -10,7 +10,7 @@ pub type Anchor3df64 = Anchor3d<f64>;
 #[cfg_attr(feature = "std", derive(derive_more::Display))]
 #[cfg_attr(feature = "std", display("V{{x:{x}, y:{y}}}"))]
 pub struct Anchor3d<T> {
-    pub pos: Vector3d<T>,
+    pub pos: Vector3<T>,
     pub distance: T,
     /// Reliability multiplier. 1.0 is default, 0.0 ignores the sensor entirely.
     pub weight: T,
@@ -32,13 +32,13 @@ where
     /// Constructor.
     #[must_use]
     pub fn new(x: T, y: T, z: T) -> Self {
-        Anchor3d { pos: Vector3d { x, y, z }, distance: T::zero(), weight: T::one() }
+        Anchor3d { pos: Vector3 { x, y, z }, distance: T::zero(), weight: T::one() }
     }
 }
 
 /// Trilaterates a 3D position using the least squares method.
 #[must_use]
-pub fn trilaterate_3d_weighted(anchors: &[Anchor3df32]) -> Option<Vector3df32> {
+pub fn trilaterate_3d_weighted(anchors: &[Anchor3df32]) -> Option<Vector3f32> {
     if anchors.len() < 4 {
         return None;
     }
@@ -82,7 +82,7 @@ pub fn trilaterate_3d_weighted(anchors: &[Anchor3df32]) -> Option<Vector3df32> {
     let mut atwa_22 = 0.0;
 
     // Initialize 3x1 vector (A^T * W * B)
-    let mut atwb = Vector3df32::default();
+    let mut atwb = Vector3f32::default();
 
     // Accumulate all rows, skipping the base anchor
     for (ii, anchor) in anchors.iter().enumerate() {
@@ -132,7 +132,7 @@ mod tests {
     const EPSILON: f32 = 1e-3;
 
     /// Generates true distances from a known target position to an anchor layout.
-    fn calculate_distances(target: Vector3df32, anchors: &mut [Anchor3df32]) {
+    fn calculate_distances(target: Vector3f32, anchors: &mut [Anchor3df32]) {
         for anchor in anchors.iter_mut() {
             anchor.distance = anchor.pos.distance(target);
         }
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_perfect_geometric_data() {
         // Position of the tracked object
-        let position = Vector3df32::new(4.5, 2.1, 7.8);
+        let position = Vector3f32::new(4.5, 2.1, 7.8);
 
         // Define 5 distributed anchors spanning 3D space
         let mut anchors = [
@@ -175,9 +175,9 @@ mod tests {
     fn test_insufficient_anchors_fails() {
         // 3D space mathematically demands at least 4 anchors to resolve the system
         let anchors = [
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 }, distance: 5.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 10.0, y: 0.0, z: 0.0 }, distance: 5.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 10.0, z: 0.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 10.0, y: 0.0, z: 0.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 10.0, z: 0.0 }, distance: 5.0, weight: 1.0 },
         ];
 
         let result = trilaterate_3d_weighted(&anchors);
@@ -186,15 +186,15 @@ mod tests {
 
     #[test]
     fn test_outlier_suppression_via_weights() {
-        let position = Vector3df32::new(5.0, 5.0, 5.0);
+        let position = Vector3f32::new(5.0, 5.0, 5.0);
 
         let mut anchors = [
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 }, distance: 0.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 10.0, y: 0.0, z: 2.0 }, distance: 0.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 10.0, z: 1.0 }, distance: 0.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 2.0, y: 1.0, z: 10.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 10.0, y: 0.0, z: 2.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 10.0, z: 1.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 2.0, y: 1.0, z: 10.0 }, distance: 0.0, weight: 1.0 },
             // Anchor 5 will be our corrupted "outlier" sensor mimicking multipath reflection
-            Anchor3df32 { pos: Vector3df32 { x: 8.0, y: 8.0, z: 8.0 }, distance: 0.0, weight: 0.001 },
+            Anchor3df32 { pos: Vector3f32 { x: 8.0, y: 8.0, z: 8.0 }, distance: 0.0, weight: 0.001 },
         ];
 
         calculate_distances(position, &mut anchors);
@@ -216,10 +216,10 @@ mod tests {
         // When all tracking nodes lie flat on a single ceiling plane (identical Z coordinate),
         // the 3D matrix system becomes non-invertible due to spatial ambiguity.
         let anchors = [
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 0.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 10.0, y: 0.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 10.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 10.0, y: 10.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 0.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 10.0, y: 0.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 10.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 10.0, y: 10.0, z: 3.0 }, distance: 5.0, weight: 1.0 },
         ];
 
         let result = trilaterate_3d_weighted(&anchors);
@@ -228,15 +228,15 @@ mod tests {
 
     #[test]
     fn test_zero_weight_anchors_ignored() {
-        let position = Vector3df32::new(3.0, 3.0, 3.0);
+        let position = Vector3f32::new(3.0, 3.0, 3.0);
 
         let mut anchors = [
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 0.0, z: 0.0 }, distance: 0.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 6.0, y: 0.0, z: 1.0 }, distance: 0.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 0.0, y: 6.0, z: 2.0 }, distance: 0.0, weight: 1.0 },
-            Anchor3df32 { pos: Vector3df32 { x: 2.0, y: 1.0, z: 6.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 6.0, y: 0.0, z: 1.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 0.0, y: 6.0, z: 2.0 }, distance: 0.0, weight: 1.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 2.0, y: 1.0, z: 6.0 }, distance: 0.0, weight: 1.0 },
             // This anchor is entirely dead and turned off (weight = 0.0). Its data should be completely bypassed.
-            Anchor3df32 { pos: Vector3df32 { x: 99.0, y: 99.0, z: 99.0 }, distance: 999.0, weight: 0.0 },
+            Anchor3df32 { pos: Vector3f32 { x: 99.0, y: 99.0, z: 99.0 }, distance: 999.0, weight: 0.0 },
         ];
 
         calculate_distances(position, &mut anchors);

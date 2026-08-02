@@ -2,7 +2,7 @@ use core::ops::Neg;
 use num_traits::{One, Zero, float::FloatCore};
 
 use crate::{SensorFusion, SensorFusionMath};
-use vqm::{Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3d};
+use vqm::{Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3};
 
 /// Complementary filter for `f32`<br>
 pub type ComplementaryFilterf32 = ComplementaryFilter<f32>;
@@ -47,11 +47,11 @@ where
     T: Copy + One + Zero + Neg<Output = T> + TrigonometricMethods + SqrtMethods,
 {
     /// Calculate roll (theta) from the normalized accelerometer readings.
-    pub fn roll_radians_from_acc_normalized(acc: Vector3d<T>) -> T {
+    pub fn roll_radians_from_acc_normalized(acc: Vector3<T>) -> T {
         (acc.y).atan2(acc.z)
     }
     /// Calculate pitch (phi) from the normalized accelerometer readings.
-    pub fn pitch_radians_from_acc_normalized(acc: Vector3d<T>) -> T {
+    pub fn pitch_radians_from_acc_normalized(acc: Vector3<T>) -> T {
         (-acc.x).atan2((acc.y * acc.y + acc.z * acc.z).sqrt())
     }
     pub fn set_alpha(&mut self, alpha: T) {
@@ -75,7 +75,7 @@ where
     }
 
     /// Fuses accelerometer and gyroscope readings to give the orientation quaternion.
-    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro(&mut self, acc: Vector3<T>, gyro_rps: Vector3<T>, delta_t: T) -> Quaternion<T> {
         // Calculate quaternion derivative (qDot) from angular rate https://ahrs.readthedocs.io/en/latest/filters/angular.html#quaternion-derivative
         // Twice the actual value is used to reduce the number of multiplications needed
         let q_dot = SensorFusionMath::derivative(self.q, gyro_rps);
@@ -85,7 +85,7 @@ where
         self.q += q_dot * delta_t;
 
         // use the normalized accelerometer data to calculate an estimate of the attitude
-        let acc: Vector3d<T> = acc.normalize();
+        let acc: Vector3<T> = acc.normalize();
         let roll_radians: T = ComplementaryFilter::roll_radians_from_acc_normalized(acc);
         let pitch_radians = ComplementaryFilter::pitch_radians_from_acc_normalized(acc);
         let q: Quaternion<T> = Quaternion::from_roll_pitch_radians(roll_radians, pitch_radians);
@@ -100,9 +100,9 @@ where
 
     fn fuse_acc_gyro_mag(
         &mut self,
-        acc: Vector3d<T>,
-        gyro_rps: Vector3d<T>,
-        _mag: Vector3d<T>,
+        acc: Vector3<T>,
+        gyro_rps: Vector3<T>,
+        _mag: Vector3<T>,
         delta_t: T,
     ) -> Quaternion<T> {
         self.fuse_acc_gyro(acc, gyro_rps, delta_t)
@@ -117,7 +117,7 @@ where
 mod tests {
     #![allow(unused)]
     use super::*;
-    use vqm::{Quaternionf32, Vector3df32};
+    use vqm::{Quaternionf32, Vector3f32};
 
     fn _is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
@@ -136,8 +136,8 @@ mod tests {
         sensor_fusion.set_alpha(1.0);
 
         let delta_t: f32 = 0.0;
-        let acc = Vector3df32::default();
-        let gyro_rps = Vector3df32::default();
+        let acc = Vector3f32::default();
+        let gyro_rps = Vector3f32::default();
 
         let orientation = sensor_fusion.fuse_acc_gyro(acc, gyro_rps, delta_t);
 

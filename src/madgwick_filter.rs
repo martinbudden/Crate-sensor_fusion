@@ -1,6 +1,6 @@
 use crate::{SensorFusion, SensorFusionMath};
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::{Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3d};
+use vqm::{Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3};
 
 /// Madgwick filter for `f32`<br>
 pub type MadgwickFilterf32 = MadgwickFilter<f32>;
@@ -116,7 +116,7 @@ where
     }
 
     /// Fuses accelerometer and gyroscope readings to give the orientation quaternion.
-    fn fuse_acc_gyro(&mut self, acc: Vector3d<T>, gyro_rps: Vector3d<T>, delta_t: T) -> Quaternion<T> {
+    fn fuse_acc_gyro(&mut self, acc: Vector3<T>, gyro_rps: Vector3<T>, delta_t: T) -> Quaternion<T> {
         // Calculate the corrective step.
         let step = SensorFusionMath::madgwick_step_acc(self.q, acc, self.max_acc_magnitude_squared);
 
@@ -134,9 +134,9 @@ where
     /// Fuses accelerometer, gyroscope, and magnetometer readings to give the orientation quaternion.
     fn fuse_acc_gyro_mag(
         &mut self,
-        acc: Vector3d<T>,
-        gyro_rps: Vector3d<T>,
-        mag: Vector3d<T>,
+        acc: Vector3<T>,
+        gyro_rps: Vector3<T>,
+        mag: Vector3<T>,
         delta_t: T,
     ) -> Quaternion<T> {
         // Calculate the corrective step.
@@ -199,7 +199,7 @@ mod tests {
     use crate::FuseAccGyro;
 
     use super::*;
-    use vqm::{Quaternionf32, Vector3df32};
+    use vqm::{Quaternionf32, Vector3f32};
 
     fn is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
@@ -236,8 +236,8 @@ mod tests {
         let mut madgwick_filter = MadgwickFilterf32::default();
 
         let dt: f32 = 0.001;
-        let acc = Vector3df32::default();
-        let gyro_rps = Vector3df32::default();
+        let acc = Vector3f32::default();
+        let gyro_rps = Vector3f32::default();
 
         let orientation = madgwick_filter.fuse_acc_gyro(acc, gyro_rps, dt);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });
@@ -252,8 +252,8 @@ mod tests {
         madgwick_filter.set_beta(1.0);
 
         let delta_t: f32 = 0.0;
-        let acc = Vector3df32::default();
-        let gyro_rps = Vector3df32::default();
+        let acc = Vector3f32::default();
+        let gyro_rps = Vector3f32::default();
 
         let orientation = madgwick_filter.fuse_acc_gyro(acc, gyro_rps, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });
@@ -264,8 +264,8 @@ mod tests {
         let mut madgwick_filter = MadgwickFilterf32::default();
 
         let delta_t: f32 = 0.0;
-        let acc = Vector3df32::default();
-        let gyro_rps = Vector3df32::default();
+        let acc = Vector3f32::default();
+        let gyro_rps = Vector3f32::default();
 
         let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick_filter, delta_t);
         assert_eq!(orientation, Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 });

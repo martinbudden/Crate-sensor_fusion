@@ -2,7 +2,7 @@ use core::ops::Mul;
 
 use num_traits::Zero;
 
-use vqm::{Matrix9x9, Matrix9x9Math, Vector3};
+use vqm::{Matrix3x3Math, Matrix9, Matrix9x9, Matrix9x9Math, Vector3};
 
 /// Kalman state vector of `f32` values<br>
 pub type KalmanStateVector9f32 = KalmanStateVector9<f32>;
@@ -58,8 +58,14 @@ impl Mul<f64> for KalmanStateVector9<f64> {
 
 impl<T> KalmanStateVector9<T>
 where
-    T: Copy + Zero + Matrix9x9Math + Mul<T, Output = T> + PartialEq,
+    T: Copy + Zero + Matrix9x9Math + Matrix3x3Math + Mul<T, Output = T> + PartialEq,
 {
+    /// Calculates the outer product of two 9-element states in a compiler-friendly manner.
+    #[inline]
+    pub fn outer_product9(self, row: KalmanStateVector9<T>) -> Matrix9<T> {
+        Matrix9::outer_product(self.pos, self.vel, self.bias, row.pos, row.vel, row.bias)
+    }
+
     /// Calculates the outer product of two 9-element states in a compiler-friendly manner.
     #[inline]
     pub fn outer_product(self, row: KalmanStateVector9<T>) -> Matrix9x9<T> {

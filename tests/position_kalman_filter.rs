@@ -316,7 +316,7 @@ mod matrix_9x9_validation_tests {
 
         // Verify Row Vector Extraction Block Layout (1-Indexed)
         // Row 1 elements should match flat indices 0, 1, 2 for position parts, etc.
-        let row1_vector = KalmanStateVector9f32::from(mat.row_tuple3d(0));
+        let row1_vector = KalmanStateVector9f32::from(mat.row_tuple_vector(0));
         assert_abs_diff_eq!(row1_vector.pos.x, 1.0, epsilon = 1e-5);
         assert_abs_diff_eq!(row1_vector.pos.y, 2.0, epsilon = 1e-5);
         assert_abs_diff_eq!(row1_vector.pos.z, 3.0, epsilon = 1e-5);
@@ -325,7 +325,7 @@ mod matrix_9x9_validation_tests {
 
         // Verify Column Vector Extraction Block Layout (1-Indexed)
         // Column 1 crosses array boundaries at increments of 9.
-        let col1_vector = KalmanStateVector9f32::from(mat.column_tuple3d(0));
+        let col1_vector = KalmanStateVector9f32::from(mat.column_tuple_vector(0));
         assert_abs_diff_eq!(col1_vector.pos.x, 1.0, epsilon = 1e-5); // Index 0
         assert_abs_diff_eq!(col1_vector.pos.y, 10.0, epsilon = 1e-5); // Index 9
         assert_abs_diff_eq!(col1_vector.pos.z, 19.0, epsilon = 1e-5); // Index 18

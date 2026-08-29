@@ -26,6 +26,7 @@ mod kalman_state_vector9;
 mod madgwick_filter;
 mod mahony_filter;
 mod position_kalman_filter;
+mod position_kalman_filter9;
 mod sensor_fusion;
 mod sensor_fusion_math;
 mod trilaterate_2d;
@@ -37,6 +38,7 @@ pub use kalman_state_vector9::{KalmanStateVector9, KalmanStateVector9f32, Kalman
 pub use madgwick_filter::{MadgwickFilter, MadgwickFilterf32, MadgwickFilterf64};
 pub use mahony_filter::{MahonyFilter, MahonyFilterf32, MahonyFilterf64};
 pub use position_kalman_filter::{PositionKalmanFilter, PositionKalmanFilterf32};
+pub use position_kalman_filter9::{PositionKalmanFilter9, PositionKalmanFilter9f32};
 
 pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};
 pub use sensor_fusion_math::SensorFusionMath;

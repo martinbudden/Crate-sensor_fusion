@@ -235,99 +235,6 @@ impl PositionKalmanFilter9 {
     }
 }
 
-impl PositionKalmanFilter9 {
-    /// Performs a numerically stable Joseph Form Covariance Update.
-    /// Formula: `P_new = (I - KH) * P * (I - KH)ᵀ + K * R * Kᵀ`.
-    ///
-    /// Because `H` is a sparse observation matrix selecting only the first 3 rows (position states),
-    ///  we can break the formula down into two efficient operations:
-    /// The `(I - KH) * P` Term: Expressed as`P - KHP` (this subtraction operates perfectly down contiguous column lines).
-    /// The Joseph Term  `K * R * Kᵀ`: since `R` is diagonal this simplifies down to a weighted outer product of the columns of `K`.
-    ///
-    /// Layouts:
-    /// * self.P: 9x9 Column-Major Covariance Matrix
-    /// * `KH_P`: 9x9 Column-Major Matrix from `reassemble_k_matrices`
-    /// * `K_pos`, `K_vel`, `K_acc_bias`: 3x3 Column-Major Kalman Gain blocks
-    /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
-    #[allow(non_snake_case)]
-    #[allow(non_snake_case)]
-    fn joseph_covariance_update(
-        P: &Matrix9f32,
-        K_pos: Matrix3x3f32,
-        K_vel: Matrix3x3f32,
-        K_acc_bias: Matrix3x3f32,
-        R: Vector3f32,
-    ) -> Matrix9f32 {
-        // -------------------------------------------------------------------------
-        // A = (I - KH)P = P - KHP
-        //
-        // H selects the first block row of P:
-        //
-        // H P = [ P[0], P[3], P[6] ]
-        // -------------------------------------------------------------------------
-
-        let A = Matrix9f32::from([
-            P[0] - K_pos * P[0],
-            P[3] - K_pos * P[3],
-            P[6] - K_pos * P[6],
-            P[1] - K_vel * P[0],
-            P[4] - K_vel * P[3],
-            P[7] - K_vel * P[6],
-            P[2] - K_acc_bias * P[0],
-            P[5] - K_acc_bias * P[3],
-            P[8] - K_acc_bias * P[6],
-        ]);
-
-        // -------------------------------------------------------------------------
-        // (I - KH)^T
-        // -------------------------------------------------------------------------
-
-        let I_minus_K_pos = Matrix3x3f32::identity() - K_pos;
-
-        // -------------------------------------------------------------------------
-        // First Joseph term:
-        //
-        // J = (I - KH)P(I - KH)^T
-        // -------------------------------------------------------------------------
-
-        #[rustfmt::skip]
-        let J = Matrix9f32::from([
-            A[Matrix9f32::M11] * I_minus_K_pos.transpose() - A[Matrix9f32::M12] * K_vel.transpose() - A[Matrix9f32::M13] * K_acc_bias.transpose(),
-            A[Matrix9f32::M12],
-            A[Matrix9f32::M13],
-            A[Matrix9f32::M21] * I_minus_K_pos.transpose() - A[Matrix9f32::M22] * K_vel.transpose() - A[Matrix9f32::M23] * K_acc_bias.transpose(),
-            A[Matrix9f32::M22],
-            A[Matrix9f32::M23],
-            A[Matrix9f32::M31] * I_minus_K_pos.transpose() - A[Matrix9f32::M32] * K_vel.transpose() - A[Matrix9f32::M33] * K_acc_bias.transpose(),
-            A[Matrix9f32::M32],
-            A[Matrix9f32::M33],
-        ]);
-        // -------------------------------------------------------------------------
-        // K R K^T
-        //
-        // R is diagonal, so this is inexpensive 3x3 block arithmetic.
-        // -------------------------------------------------------------------------
-
-        // -------------------------------------------------------------------------
-        // P_new = J + K R K^T
-        // -------------------------------------------------------------------------
-
-        let R_diag = Matrix3x3f32::from_diagonal_vector(R);
-        let KRK = Matrix9f32::from([
-            K_pos * R_diag * K_pos.transpose(),
-            K_vel * R_diag * K_pos.transpose(),
-            K_acc_bias * R_diag * K_pos.transpose(),
-            K_pos * R_diag * K_vel.transpose(),
-            K_vel * R_diag * K_vel.transpose(),
-            K_acc_bias * R_diag * K_vel.transpose(),
-            K_pos * R_diag * K_acc_bias.transpose(),
-            K_vel * R_diag * K_acc_bias.transpose(),
-            K_acc_bias * R_diag * K_acc_bias.transpose(),
-        ]);
-
-        J + KRK
-    }
-}
 // **** Correct ***
 
 impl PositionKalmanFilter9 {
@@ -476,7 +383,75 @@ impl PositionKalmanFilter9 {
         self.vel += K_vel * error;
         self.acc_bias += K_acc_bias * error;
 
-        self.P = Self::joseph_covariance_update(&self.P, K_pos, K_vel, K_acc_bias, R);
+        // -------------------------------------------------------------------------
+        // A = (I - KH)P = P - KHP
+        //
+        // H selects the first block row of P:
+        //
+        // H P = [ P[0], P[3], P[6] ]
+        // -------------------------------------------------------------------------
+
+        let P = self.P;
+        let A = Matrix9f32::from([
+            P[0] - K_pos * P[0],
+            P[3] - K_pos * P[3],
+            P[6] - K_pos * P[6],
+            P[1] - K_vel * P[0],
+            P[4] - K_vel * P[3],
+            P[7] - K_vel * P[6],
+            P[2] - K_acc_bias * P[0],
+            P[5] - K_acc_bias * P[3],
+            P[8] - K_acc_bias * P[6],
+        ]);
+
+        // -------------------------------------------------------------------------
+        // (I - KH)^T
+        // -------------------------------------------------------------------------
+
+        let I_minus_K_pos = Matrix3x3f32::identity() - K_pos;
+
+        // -------------------------------------------------------------------------
+        // First Joseph term:
+        //
+        // J = (I - KH)P(I - KH)^T
+        // -------------------------------------------------------------------------
+
+        #[rustfmt::skip]
+        let J = Matrix9f32::from([
+            A[Matrix9f32::M11] * I_minus_K_pos.transpose() - A[Matrix9f32::M12] * K_vel.transpose() - A[Matrix9f32::M13] * K_acc_bias.transpose(),
+            A[Matrix9f32::M12],
+            A[Matrix9f32::M13],
+            A[Matrix9f32::M21] * I_minus_K_pos.transpose() - A[Matrix9f32::M22] * K_vel.transpose() - A[Matrix9f32::M23] * K_acc_bias.transpose(),
+            A[Matrix9f32::M22],
+            A[Matrix9f32::M23],
+            A[Matrix9f32::M31] * I_minus_K_pos.transpose() - A[Matrix9f32::M32] * K_vel.transpose() - A[Matrix9f32::M33] * K_acc_bias.transpose(),
+            A[Matrix9f32::M32],
+            A[Matrix9f32::M33],
+        ]);
+        // -------------------------------------------------------------------------
+        // K R K^T
+        //
+        // R is diagonal, so this is inexpensive 3x3 block arithmetic.
+        // -------------------------------------------------------------------------
+
+        // -------------------------------------------------------------------------
+        // P_new = J + K R K^T
+        // -------------------------------------------------------------------------
+
+        let R_diag = Matrix3x3f32::from_diagonal_vector(R);
+        let KRK = Matrix9f32::from([
+            K_pos * R_diag * K_pos.transpose(),
+            K_vel * R_diag * K_pos.transpose(),
+            K_acc_bias * R_diag * K_pos.transpose(),
+            K_pos * R_diag * K_vel.transpose(),
+            K_vel * R_diag * K_vel.transpose(),
+            K_acc_bias * R_diag * K_vel.transpose(),
+            K_pos * R_diag * K_acc_bias.transpose(),
+            K_vel * R_diag * K_acc_bias.transpose(),
+            K_acc_bias * R_diag * K_acc_bias.transpose(),
+        ]);
+
+        self.P = J + KRK;
 
         self.E = self.P;
     }

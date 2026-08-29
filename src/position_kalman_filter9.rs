@@ -1,6 +1,4 @@
-use vqm::{Matrix3x3f32, Matrix9f32, Vector3f32};
-
-use crate::KalmanStateVector9f32;
+use vqm::{Matrix3x3f32, Matrix9, Matrix9f32, Vector3f32};
 
 /// `f32` variant of `PositionKalmanFilter0`.
 pub type PositionKalmanFilter9f32 = PositionKalmanFilter9;
@@ -62,6 +60,18 @@ impl Default for PositionKalmanFilter9 {
 impl PositionKalmanFilter9 {
     pub const Z_POS_ROW: usize = 2; // H vector selects the 3rd row of P
     pub const Z_POS_COL: usize = 2; // 3rd column corresponds to Z position (Altitude)
+    const PP: usize = 0;
+    const VP: usize = 1;
+    const BP: usize = 2;
+
+    const PV: usize = 3;
+    const VV: usize = 4;
+    const BV: usize = 5;
+
+    const PB: usize = 6;
+    const VB: usize = 7;
+    const BB: usize = 8;
+
     pub const S_XX: usize = Matrix3x3f32::M11;
     pub const S_YY: usize = Matrix3x3f32::M22;
     pub const S_ZZ: usize = Matrix3x3f32::M33;
@@ -121,12 +131,6 @@ impl PositionKalmanFilter9 {
     This means our 9x9 matrix **A** is incredibly sparse, containing only a few *dt* terms on the off-diagonals.
      If we write out the math for \(AEA^{T}\) manually using 3x3 blocks, the matrix operations simplify into a clean sequence of 3x3 array updates.
     */
-    /*
-        So I have a Kalman filter implementation the uses Matrix9x9, a 9x9 matrix of 81 elements stored in a flat array in column-major order.
-        The predict function split the 9x9 matrix into 9 3x3 blocks as below.
-        I'd like to reimplement it with the new Matrix9, we are using, ie 9 Matrix3x3 stored in a flat array in column-major order.
-        Can you help me with that?
-    */
     /// Propagates the 9x9 covariance matrix forward in time.
     ///
     /// A full 9x9 matrix multiplication involves 729 individual multiplications.
@@ -171,60 +175,45 @@ impl PositionKalmanFilter9 {
         //     a[2] a[5] a[8]
         // -------------------------------------------------------------------------
 
-        const S_XX: usize = Matrix3x3f32::M11;
-        const S_YY: usize = Matrix3x3f32::M22;
-        const S_ZZ: usize = Matrix3x3f32::M33;
-
-        const PP: usize = 0;
-        const VP: usize = 1;
-        const BP: usize = 2;
-
-        const PV: usize = 3;
-        const VV: usize = 4;
-        const BV: usize = 5;
-
-        /*const PB: usize = 6;
-        const VB: usize = 7;*/
-        const BB: usize = 8;
-
         let one_plus_dt = 1.0 + dt;
         let one_minus_dt = 1.0 - dt;
 
-        let E = self.E;
-        let mut P = E;
+        let E = self.P;
+        let mut P = Matrix9f32::default();
 
         // =====================================================================
         // POSITION COLUMNS
         // =====================================================================
 
         // Position / Position
-        P[PP] = E[PP] + dt * (E[VP] * one_plus_dt + E[PV]);
+        P[Self::PP] = E[Self::PP] + dt * (E[Self::VP] * one_plus_dt + E[Self::PV]);
 
         // Velocity / Position
-        P[VP] = E[PV] - dt * (E[VP] * one_plus_dt - E[BP]);
+        P[Self::VP] = E[Self::PV] - dt * (E[Self::VP] * one_plus_dt - E[Self::PB]);
 
         // Bias / Position
-        P[BP] = E[BP] + dt * E[VP];
+        P[Self::BP] = E[Self::PB] + dt * E[Self::VP];
 
         // =====================================================================
         // VELOCITY COLUMNS
         // =====================================================================
 
         // Position / Velocity
-        P[PV] = E[VP] + dt * (E[BP] * one_minus_dt - E[VV]);
+        P[Self::PV] = E[Self::VP] + dt * (E[Self::BP] * one_minus_dt - E[Self::VV]);
 
         // Velocity / Velocity
-        P[VV] = E[VV] - dt * (E[BP] * one_plus_dt + E[BV]);
+        P[Self::VV] = E[Self::VV] - dt * (E[Self::BP] * one_plus_dt + E[Self::BV]);
 
         // Bias / Velocity
-        P[BV] = E[BV];
+        P[Self::BV] = E[Self::BV];
 
         // =====================================================================
         // BIAS COLUMNS
-        //
-        // PB, VB and BB are unchanged, so they are already correct because
-        // P was initialized from E above.
         // =====================================================================
+
+        P[Self::PB] = E[Self::BP];
+        P[Self::VB] = E[Self::BV];
+        P[Self::BB] = E[Self::BB];
 
         // =====================================================================
         // PROCESS NOISE
@@ -232,20 +221,113 @@ impl PositionKalmanFilter9 {
 
         let q_velocity_dt2 = self.q_velocity * dt * dt;
 
-        P[VV][S_XX] += q_velocity_dt2;
-        P[VV][S_YY] += q_velocity_dt2;
-        P[VV][S_ZZ] += q_velocity_dt2;
+        P[Self::VV][Self::S_XX] += q_velocity_dt2;
+        P[Self::VV][Self::S_YY] += q_velocity_dt2;
+        P[Self::VV][Self::S_ZZ] += q_velocity_dt2;
 
         let q_bias_dt2 = self.q_bias * dt * dt;
 
-        P[BB][S_XX] += q_bias_dt2;
-        P[BB][S_YY] += q_bias_dt2;
-        P[BB][S_ZZ] += q_bias_dt2;
+        P[Self::BB][Self::S_XX] += q_bias_dt2;
+        P[Self::BB][Self::S_YY] += q_bias_dt2;
+        P[Self::BB][Self::S_ZZ] += q_bias_dt2;
 
         self.P = P;
     }
 }
 
+impl PositionKalmanFilter9 {
+    /// Performs a numerically stable Joseph Form Covariance Update.
+    /// Formula: `P_new = (I - KH) * P * (I - KH)ᵀ + K * R * Kᵀ`.
+    ///
+    /// Because `H` is a sparse observation matrix selecting only the first 3 rows (position states),
+    ///  we can break the formula down into two efficient operations:
+    /// The `(I - KH) * P` Term: Expressed as`P - KHP` (this subtraction operates perfectly down contiguous column lines).
+    /// The Joseph Term  `K * R * Kᵀ`: since `R` is diagonal this simplifies down to a weighted outer product of the columns of `K`.
+    ///
+    /// Layouts:
+    /// * self.P: 9x9 Column-Major Covariance Matrix
+    /// * `KH_P`: 9x9 Column-Major Matrix from `reassemble_k_matrices`
+    /// * `K_pos`, `K_vel`, `K_acc_bias`: 3x3 Column-Major Kalman Gain blocks
+    /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
+    #[allow(non_snake_case)]
+    #[allow(non_snake_case)]
+    fn joseph_covariance_update(
+        P: &Matrix9f32,
+        K_pos: Matrix3x3f32,
+        K_vel: Matrix3x3f32,
+        K_acc_bias: Matrix3x3f32,
+        R: Vector3f32,
+    ) -> Matrix9f32 {
+        // -------------------------------------------------------------------------
+        // A = (I - KH)P = P - KHP
+        //
+        // H selects the first block row of P:
+        //
+        // H P = [ P[0], P[3], P[6] ]
+        // -------------------------------------------------------------------------
+
+        let A = Matrix9f32::from([
+            P[0] - K_pos * P[0],
+            P[3] - K_pos * P[3],
+            P[6] - K_pos * P[6],
+            P[1] - K_vel * P[0],
+            P[4] - K_vel * P[3],
+            P[7] - K_vel * P[6],
+            P[2] - K_acc_bias * P[0],
+            P[5] - K_acc_bias * P[3],
+            P[8] - K_acc_bias * P[6],
+        ]);
+
+        // -------------------------------------------------------------------------
+        // (I - KH)^T
+        // -------------------------------------------------------------------------
+
+        let I_minus_K_pos = Matrix3x3f32::identity() - K_pos;
+
+        // -------------------------------------------------------------------------
+        // First Joseph term:
+        //
+        // J = (I - KH)P(I - KH)^T
+        // -------------------------------------------------------------------------
+
+        #[rustfmt::skip]
+        let J = Matrix9f32::from([
+            A[Matrix9f32::M11] * I_minus_K_pos.transpose() - A[Matrix9f32::M12] * K_vel.transpose() - A[Matrix9f32::M13] * K_acc_bias.transpose(),
+            A[Matrix9f32::M12],
+            A[Matrix9f32::M13],
+            A[Matrix9f32::M21] * I_minus_K_pos.transpose() - A[Matrix9f32::M22] * K_vel.transpose() - A[Matrix9f32::M23] * K_acc_bias.transpose(),
+            A[Matrix9f32::M22],
+            A[Matrix9f32::M23],
+            A[Matrix9f32::M31] * I_minus_K_pos.transpose() - A[Matrix9f32::M32] * K_vel.transpose() - A[Matrix9f32::M33] * K_acc_bias.transpose(),
+            A[Matrix9f32::M32],
+            A[Matrix9f32::M33],
+        ]);
+        // -------------------------------------------------------------------------
+        // K R K^T
+        //
+        // R is diagonal, so this is inexpensive 3x3 block arithmetic.
+        // -------------------------------------------------------------------------
+
+        // -------------------------------------------------------------------------
+        // P_new = J + K R K^T
+        // -------------------------------------------------------------------------
+
+        let R_diag = Matrix3x3f32::from_diagonal_vector(R);
+        let KRK = Matrix9f32::from([
+            K_pos * R_diag * K_pos.transpose(),
+            K_vel * R_diag * K_pos.transpose(),
+            K_acc_bias * R_diag * K_pos.transpose(),
+            K_pos * R_diag * K_vel.transpose(),
+            K_vel * R_diag * K_vel.transpose(),
+            K_acc_bias * R_diag * K_vel.transpose(),
+            K_pos * R_diag * K_acc_bias.transpose(),
+            K_vel * R_diag * K_acc_bias.transpose(),
+            K_acc_bias * R_diag * K_acc_bias.transpose(),
+        ]);
+
+        J + KRK
+    }
+}
 // **** Correct ***
 
 impl PositionKalmanFilter9 {
@@ -263,21 +345,24 @@ impl PositionKalmanFilter9 {
 
         // Calculate the 9-element Kalman Gain vector: K = (P * H^T) / S
         // Multiplying P by H^T is mathematically identical to extracting the 3rd column of P
-        let K = KalmanStateVector9f32::from(self.P.column_tuple_vector(Self::Z_POS_COL)) * (1.0 / S);
+        let K_pos = self.P[Self::Z_POS_COL].column(0) * (1.0 / S);
+        let K_vel = self.P[Self::Z_POS_COL].column(1) * (1.0 / S);
+        let K_bias = self.P[Self::Z_POS_COL].column(2) * (1.0 / S);
 
         // Calculate the scalar innovation error
         let error = altitude - self.pos.z;
 
         // Update the state vectors
-        self.pos += K.pos * error;
-        self.vel += K.vel * error;
-        self.acc_bias += K.bias * error;
+        self.pos += K_pos * error;
+        self.vel += K_vel * error;
+        self.acc_bias += K_bias * error;
 
         // Extract the altitude row of P to calculate the error covariance: E = P - K * H * P
-        let altitude_row = KalmanStateVector9f32::from(self.P.row_tuple_vector(Self::Z_POS_ROW));
+        let A0 = self.P[Self::Z_POS_COL].row(0);
+        let A1 = self.P[Self::Z_POS_COL].row(1);
+        let A2 = self.P[Self::Z_POS_COL].row(2);
 
-        // K.outer_product(altitude_row) generates the 9x9 correction matrix
-        self.E = self.P - K.outer_product9(altitude_row);
+        self.E = self.P - Matrix9::outer_product(K_pos, K_vel, K_bias, A0, A1, A2);
         self.P = self.E;
     }
 
@@ -322,7 +407,7 @@ impl PositionKalmanFilter9 {
     #[allow(non_snake_case)]
     pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
         // Extract the PositionPosition 3x3 sub-matrix from the top-left of the 9x9 P matrix.
-        let mut P_pos = Matrix3x3f32::from(self.P);
+        let mut P_pos = self.P[Self::PP];
 
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
         // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
@@ -336,13 +421,13 @@ impl PositionKalmanFilter9 {
             return;
         };
 
-        // Calculate the Kalman Gain: K = (P * H^T) * S_inv, and split it into 3 separate 3x3 matrices.
-        // We do this by extracting the first 3 columns of P, which is mathematically equivalent to calculating P * H^T
-        // and then multiplying by S_inv.
-        //let (K_pos, K_vel, K_acc_bias) = Matrix9x9f32::multiply_9x3_by_3x3(&self.P, S_inv);
-        let K_pos = self.P[0] * S_inv;
-        let K_vel = self.P[0] * S_inv;
-        let K_acc_bias = self.P[0] * S_inv;
+        // Calculate the Kalman Gain: K = (P * H^T) * S_inv.
+        //
+        // H selects the position states, so P * H^T is simply the first
+        // three columns of P, represented by the first three Matrix3x3 blocks.
+        let K_pos = self.P[Self::PP] * S_inv;
+        let K_vel = self.P[Self::VP] * S_inv;
+        let K_acc_bias = self.P[Self::BP] * S_inv;
 
         // Calculate the error vector.
         let error = position - self.pos;
@@ -352,8 +437,22 @@ impl PositionKalmanFilter9 {
         self.vel += K_vel * error;
         self.acc_bias += K_acc_bias * error;
 
-        // Calculate K * (H * P) by re-assembling the 3x3 K_matrices into the 9x9 KH_P matrix.
-        let KH_P = Matrix9f32::identity(); //self.reassemble_k_matrices(K_pos, K_vel, K_acc_bias);
+        // Calculate K * (H * P) by re-assembling the 3x3 K_matrices into
+        // the 9x9 KH_P matrix.
+        //
+        // H * P selects the first three rows of P, which correspond to the
+        // block row [P[0], P[3], P[6]].
+        let KH_P = Matrix9::from([
+            K_pos * self.P[Self::PP],
+            K_pos * self.P[Self::PV],
+            K_pos * self.P[Self::PB],
+            K_vel * self.P[Self::PP],
+            K_vel * self.P[Self::PV],
+            K_vel * self.P[Self::PB],
+            K_acc_bias * self.P[Self::PP],
+            K_acc_bias * self.P[Self::PV],
+            K_acc_bias * self.P[Self::PB],
+        ]);
 
         // Update Covariance Matrix: E = P - K * (H * P)
         self.E = self.P - KH_P;
@@ -362,6 +461,25 @@ impl PositionKalmanFilter9 {
         self.P = self.E;
     }
 
+    #[allow(non_snake_case)]
+    pub fn correct_position_joseph(&mut self, position: Vector3f32, R: Vector3f32) {
+        let Some(S_inv) = self.P[Self::PP].try_inverse() else {
+            return;
+        };
+        let K_pos = self.P[Self::PP] * S_inv;
+        let K_vel = self.P[Self::VP] * S_inv;
+        let K_acc_bias = self.P[Self::BP] * S_inv;
+
+        let error = position - self.pos;
+
+        self.pos += K_pos * error;
+        self.vel += K_vel * error;
+        self.acc_bias += K_acc_bias * error;
+
+        self.P = Self::joseph_covariance_update(&self.P, K_pos, K_vel, K_acc_bias, R);
+
+        self.E = self.P;
+    }
     /// Phase 2: Correct position using GPS position measurement (typically at a 1Hz to 10Hz rate).
     pub fn correct_position_using_gps(&mut self, position: Vector3f32) {
         let r_gps = Vector3f32 { x: self.r_gps_horizontal, y: self.r_gps_horizontal, z: self.r_gps_vertical };
@@ -387,27 +505,25 @@ impl PositionKalmanFilter9 {
     /// * `gate_threshold`: Chi-squared limit (e.g., 7.815 for 3 DOF at 95% confidence)
     #[must_use]
     #[allow(non_snake_case)]
-    pub fn validate_measurement(&self, y: Vector3f32, _R: Vector3f32, gate_threshold: f32) -> bool {
+    pub fn validate_measurement(&self, y: Vector3f32, R: Vector3f32, gate_threshold: f32) -> bool {
         // Collect the columns into an array using standard iteration.
         // Collecting exactly 3 items ensures we can pattern match them safely without using `unwrap`.
-        let mut col_iter = self.P.iter_columns();
+        /*let mut col_iter = self.P.iter_columns();
         let (Some(col0), Some(col1), Some(col2)) = (col_iter.next(), col_iter.next(), col_iter.next()) else {
             return false; // Structured pipeline fallback safety
-        };
+        };*/
+        let col0 = self.P.column(0);
+        let col1 = self.P.column(1);
+        let col2 = self.P.column(2);
 
         // H selects position states (rows 0, 1, 2) from columns 0, 1, 2 of matrix P.
         // We pack these into our a Matrix3x3f32.
-        /*#[rustfmt::skip]
+        #[rustfmt::skip]
         let S = Matrix3x3f32::from_column_array([
             col0[0] + R.x, col0[1],       col0[2],
             col1[0],       col1[1] + R.y, col1[2],
             col2[0],       col2[1],       col2[2] + R.z,
-        ]);*/
-        _ = col0;
-        _ = col1;
-        _ = col2;
-
-        let S = Matrix3x3f32::identity();
+        ]);
 
         let Some(S_inv) = S.try_inverse() else {
             return false;
@@ -434,70 +550,5 @@ mod test_traits {
     #[test]
     fn normal_types() {
         is_full::<PositionKalmanFilter9>();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use vqm::Matrix9x9f32;
-
-    use crate::PositionKalmanFilter;
-
-    use super::*;
-
-    fn assert_matrix9x9_close(expected: &Matrix9x9f32, actual: &Matrix9x9f32, epsilon: f32) {
-        for col in 0..9 {
-            for row in 0..9 {
-                let index = col * 9 + row;
-
-                let expected_value = expected[index];
-                let actual_value = actual[index];
-                let difference = (expected_value - actual_value).abs();
-
-                assert!(
-                    difference <= epsilon,
-                    "Matrix mismatch at ({row}, {col}), index {index}: \
-                     expected {expected_value}, got {actual_value}, \
-                     difference {difference}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn predict_covariance_block_implementation_matches_original() {
-        // Deliberately non-symmetric matrix. This is useful because it
-        // exposes row/column and transpose errors that could be hidden
-        // by a symmetric covariance matrix.
-        let initial_e = Matrix9x9f32::from_row_array([
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0,
-            20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0,
-            38.0, 39.0, 40.0, 41.0, 42.0, 43.0, 44.0, 45.0, 46.0, 47.0, 48.0, 49.0, 50.0, 51.0, 52.0, 53.0, 54.0, 55.0,
-            56.0, 57.0, 58.0, 59.0, 60.0, 61.0, 62.0, 63.0, 64.0, 65.0, 66.0, 67.0, 68.0, 69.0, 70.0, 71.0, 72.0, 73.0,
-            74.0, 75.0, 76.0, 77.0, 78.0, 79.0, 80.0, 81.0,
-        ]);
-
-        let dt = 0.01;
-        let q_velocity = 0.2;
-        let q_bias = 0.03;
-
-        let mut original = PositionKalmanFilter::new();
-        original.E = initial_e;
-        original.q_velocity = q_velocity;
-        original.q_bias = q_bias;
-
-        // Run the original scalar implementation.
-        original.predict_covariance(dt);
-
-        let mut block = PositionKalmanFilter9::new();
-        block.E = Matrix9f32::from(initial_e);
-        block.q_velocity = q_velocity;
-        block.q_bias = q_bias;
-
-        // Run the new Matrix9 block implementation.
-        block.predict_covariance(dt);
-
-        // The two implementations should produce the same 9x9 matrix.
-        assert_matrix9x9_close(&original.P, &Matrix9x9f32::from(block.P), 1e-5);
     }
 }

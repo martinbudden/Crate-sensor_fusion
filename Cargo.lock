@@ -655,6 +655,7 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 [[package]]
 name = "vqm"
 version = "0.1.14"
+source = "git+https://github.com/martinbudden/crate-vector-quaternion-matrix#5d76724e5e0e02d2cc254cc0280594f02d618d6f"
 dependencies = [
  "cfg-if",
  "derive_more",

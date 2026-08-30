@@ -60,6 +60,17 @@ impl Default for PositionKalmanFilter9 {
 impl PositionKalmanFilter9 {
     pub const Z_POS_ROW: usize = 2; // H vector selects the 3rd row of P
     pub const Z_POS_COL: usize = 2; // 3rd column corresponds to Z position (Altitude)
+
+    const M11: usize = Matrix9f32::M11;
+    const M21: usize = Matrix9f32::M21;
+    const M31: usize = Matrix9f32::M31;
+    const M12: usize = Matrix9f32::M12;
+    const M22: usize = Matrix9f32::M22;
+    const M23: usize = Matrix9f32::M23;
+    const M13: usize = Matrix9f32::M13;
+    const M32: usize = Matrix9f32::M32;
+    const M33: usize = Matrix9f32::M33;
+
     const PP: usize = 0;
     const VP: usize = 1;
     const BP: usize = 2;
@@ -71,10 +82,6 @@ impl PositionKalmanFilter9 {
     const PB: usize = 6;
     const VB: usize = 7;
     const BB: usize = 8;
-
-    pub const S_XX: usize = Matrix3x3f32::M11;
-    pub const S_YY: usize = Matrix3x3f32::M22;
-    pub const S_ZZ: usize = Matrix3x3f32::M33;
 }
 
 impl PositionKalmanFilter9 {
@@ -168,11 +175,6 @@ impl PositionKalmanFilter9 {
         //          Bias │ E[BP]    │ E[BV]    │ E[BB]    │
         //               └──────────┴──────────┴──────────┘
         //
-        // Matrix9 stores these column-major:
-        //
-        //     a[0] a[3] a[6]
-        //     a[1] a[4] a[7]
-        //     a[2] a[5] a[8]
         // -------------------------------------------------------------------------
 
         let one_plus_dt = 1.0 + dt;
@@ -221,15 +223,15 @@ impl PositionKalmanFilter9 {
 
         let q_velocity_dt2 = self.q_velocity * dt * dt;
 
-        P[Self::VV][Self::S_XX] += q_velocity_dt2;
-        P[Self::VV][Self::S_YY] += q_velocity_dt2;
-        P[Self::VV][Self::S_ZZ] += q_velocity_dt2;
+        P[Self::VV][Self::PP] += q_velocity_dt2;
+        P[Self::VV][Self::VV] += q_velocity_dt2;
+        P[Self::VV][Self::BB] += q_velocity_dt2;
 
         let q_bias_dt2 = self.q_bias * dt * dt;
 
-        P[Self::BB][Self::S_XX] += q_bias_dt2;
-        P[Self::BB][Self::S_YY] += q_bias_dt2;
-        P[Self::BB][Self::S_ZZ] += q_bias_dt2;
+        P[Self::BB][Self::PP] += q_bias_dt2;
+        P[Self::BB][Self::VV] += q_bias_dt2;
+        P[Self::BB][Self::BB] += q_bias_dt2;
 
         self.P = P;
     }
@@ -248,7 +250,7 @@ impl PositionKalmanFilter9 {
     #[allow(non_snake_case)]
     pub fn correct_altitude(&mut self, altitude: f32, R: f32) {
         // Calculate the scalar innovation covariance: S = P_zz + R
-        let S = self.P[0][Matrix9f32::M33] + R;
+        let S = self.P[Self::PP][Matrix9f32::M33] + R;
 
         // Calculate the 9-element Kalman Gain vector: K = (P * H^T) / S
         // Multiplying P by H^T is mathematically identical to extracting the 3rd column of P
@@ -318,9 +320,9 @@ impl PositionKalmanFilter9 {
 
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
         // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
-        P_pos[Self::S_XX] += R.x;
-        P_pos[Self::S_YY] += R.y;
-        P_pos[Self::S_ZZ] += R.z;
+        P_pos[Self::PP] += R.x;
+        P_pos[Self::VV] += R.y;
+        P_pos[Self::BB] += R.z;
 
         // Calculate inverse of S.
         // If S is singular (eg sensor fault), we safely return to prevent a system crash.
@@ -348,7 +350,7 @@ impl PositionKalmanFilter9 {
         // the 9x9 KH_P matrix.
         //
         // H * P selects the first three rows of P, which correspond to the
-        // block row [P[0], P[3], P[6]].
+        // block row [P[PP], P[PV], P[PB]].
         let KH_P = Matrix9::from([
             K_pos * self.P[Self::PP],
             K_pos * self.P[Self::PV],
@@ -388,27 +390,27 @@ impl PositionKalmanFilter9 {
         //
         // H selects the first block row of P:
         //
-        // H P = [ P[0], P[3], P[6] ]
+        // H P = [ P[PP], P[Self::PV], P[PB] ]
         // -------------------------------------------------------------------------
 
         let P = self.P;
         let A = Matrix9f32::from([
-            P[0] - K_pos * P[0],
-            P[3] - K_pos * P[3],
-            P[6] - K_pos * P[6],
-            P[1] - K_vel * P[0],
-            P[4] - K_vel * P[3],
-            P[7] - K_vel * P[6],
-            P[2] - K_acc_bias * P[0],
-            P[5] - K_acc_bias * P[3],
-            P[8] - K_acc_bias * P[6],
+            P[Self::PP] - K_pos * P[Self::PP],
+            P[Self::PV] - K_pos * P[Self::PV],
+            P[Self::PB] - K_pos * P[Self::PB],
+            P[Self::VP] - K_vel * P[Self::PP],
+            P[Self::VV] - K_vel * P[Self::PV],
+            P[Self::VB] - K_vel * P[Self::PB],
+            P[Self::BP] - K_acc_bias * P[Self::PP],
+            P[Self::BV] - K_acc_bias * P[Self::PV],
+            P[Self::BB] - K_acc_bias * P[Self::PB],
         ]);
 
         // -------------------------------------------------------------------------
         // (I - KH)^T
         // -------------------------------------------------------------------------
 
-        let I_minus_K_pos = Matrix3x3f32::identity() - K_pos;
+        let I_minus_K_pos_t = (Matrix3x3f32::identity() - K_pos).transpose();
 
         // -------------------------------------------------------------------------
         // First Joseph term:
@@ -416,17 +418,19 @@ impl PositionKalmanFilter9 {
         // J = (I - KH)P(I - KH)^T
         // -------------------------------------------------------------------------
 
-        #[rustfmt::skip]
+        let K_vel_t = K_vel.transpose();
+        let K_acc_bias_t = K_acc_bias.transpose();
+
         let J = Matrix9f32::from([
-            A[Matrix9f32::M11] * I_minus_K_pos.transpose() - A[Matrix9f32::M12] * K_vel.transpose() - A[Matrix9f32::M13] * K_acc_bias.transpose(),
-            A[Matrix9f32::M12],
-            A[Matrix9f32::M13],
-            A[Matrix9f32::M21] * I_minus_K_pos.transpose() - A[Matrix9f32::M22] * K_vel.transpose() - A[Matrix9f32::M23] * K_acc_bias.transpose(),
-            A[Matrix9f32::M22],
-            A[Matrix9f32::M23],
-            A[Matrix9f32::M31] * I_minus_K_pos.transpose() - A[Matrix9f32::M32] * K_vel.transpose() - A[Matrix9f32::M33] * K_acc_bias.transpose(),
-            A[Matrix9f32::M32],
-            A[Matrix9f32::M33],
+            A[Self::M11] * I_minus_K_pos_t - A[Self::M12] * K_vel_t - A[Self::M13] * K_acc_bias_t,
+            A[Self::M12],
+            A[Self::M13],
+            A[Self::M21] * I_minus_K_pos_t - A[Self::M22] * K_vel_t - A[Self::M23] * K_acc_bias_t,
+            A[Self::M22],
+            A[Self::M23],
+            A[Self::M31] * I_minus_K_pos_t - A[Self::M32] * K_vel_t - A[Self::M33] * K_acc_bias_t,
+            A[Self::M32],
+            A[Self::M33],
         ]);
         // -------------------------------------------------------------------------
         // K R K^T
@@ -438,17 +442,21 @@ impl PositionKalmanFilter9 {
         // P_new = J + K R K^T
         // -------------------------------------------------------------------------
 
-        let R_diag = Matrix3x3f32::from_diagonal_vector(R);
+        let K_pos_t = K_pos.transpose();
+        let K_pos_R = K_pos.mul_diag_vector(R);
+        let K_vel_R = K_vel.mul_diag_vector(R);
+        let K_acc_bias_R = K_acc_bias.mul_diag_vector(R);
+
         let KRK = Matrix9f32::from([
-            K_pos * R_diag * K_pos.transpose(),
-            K_vel * R_diag * K_pos.transpose(),
-            K_acc_bias * R_diag * K_pos.transpose(),
-            K_pos * R_diag * K_vel.transpose(),
-            K_vel * R_diag * K_vel.transpose(),
-            K_acc_bias * R_diag * K_vel.transpose(),
-            K_pos * R_diag * K_acc_bias.transpose(),
-            K_vel * R_diag * K_acc_bias.transpose(),
-            K_acc_bias * R_diag * K_acc_bias.transpose(),
+            K_pos_R * K_pos_t,
+            K_vel_R * K_pos_t,
+            K_acc_bias_R * K_pos_t,
+            K_pos_R * K_vel_t,
+            K_vel_R * K_vel_t,
+            K_acc_bias_R * K_vel_t,
+            K_pos_R * K_acc_bias_t,
+            K_vel_R * K_acc_bias_t,
+            K_acc_bias_R * K_acc_bias_t,
         ]);
 
         self.P = J + KRK;

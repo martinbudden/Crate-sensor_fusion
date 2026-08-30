@@ -52,11 +52,6 @@ mod position_filter_tests {
             E: Matrix9x9f32::default(),
             q_velocity: 0.1,
             q_bias: 0.01,
-            r_gps_horizontal: 1.0,
-            r_gps_vertical: 2.0,
-            r_barometer: 4.0, // Measurement noise R = 4.0
-            r_rangefinder: 0.0,
-            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Introduce an altitude measurement with a 10-meter error step
@@ -68,7 +63,8 @@ mod position_filter_tests {
         // K_pos_z = P_zz / S = 4.0 / 8.0 = 0.5
         // K_vel_z = P_vz / S = 1.0 / 8.0 = 0.125
         // K_bias_z = P_bz / S = -0.5 / 8.0 = -0.0625
-        filter.correct_altitude_using_barometer(barometer_reading);
+        let r_barometer = 4.0; // Measurement noise R = 4.0
+        filter.correct_altitude(barometer_reading, r_barometer);
 
         // Verify State Corrections: New Value = Old Value + (K * Error)
         // Expected Z position = 100.0 + (0.5 * 10.0) = 105.0
@@ -132,11 +128,6 @@ mod gps_filter_tests {
             E: Matrix9x9f32::default(),
             q_velocity: 0.1,
             q_bias: 0.01,
-            r_gps_horizontal: 2.0, // Horizontal GPS noise covariance
-            r_gps_vertical: 3.0,   // Vertical GPS noise covariance
-            r_barometer: 1.0,
-            r_rangefinder: 0.0,
-            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Introduce a 3D GPS packet with a specific translation step error
@@ -151,7 +142,10 @@ mod gps_filter_tests {
         // S_zz = 3.0 (P_zz) + 3.0 (R_vertical)  = 6.0  => S_inv_zz = 1.0 / 6.0 = 0.166666
         // K_pos_xx = P_xx * S_inv_xx = 2.0 * 0.25 = 0.5
         // K_pos_zz = P_zz * S_inv_zz = 3.0 * 0.166666 = 0.5
-        filter.correct_position_using_gps(gps_reading);
+        let r_gps_horizontal = 2.0; // Horizontal GPS noise covariance
+        let r_gps_vertical = 3.0; // Vertical GPS noise covariance
+        let r_gps = Vector3f32 { x: r_gps_horizontal, y: r_gps_horizontal, z: r_gps_vertical };
+        filter.correct_position(gps_reading, r_gps);
 
         // Verify Position Updates: New = Old + (K * Error)
         // New X pos = 10.0 + (0.5 * 4.0) + (0.0 * 0.0) + (0.0 * 6.0) = 12.0
@@ -213,11 +207,6 @@ mod gps_filter_tests {
             E: Matrix9x9f32::default(),
             q_velocity: 0.1,
             q_bias: 0.01,
-            r_gps_horizontal: 2.0, // Horizontal GPS noise covariance (R)
-            r_gps_vertical: 3.0,   // Vertical GPS noise covariance (R)
-            r_barometer: 1.0,
-            r_rangefinder: 0.0,
-            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Introduce a 3D GPS packet with a specific translation step error
@@ -226,7 +215,10 @@ mod gps_filter_tests {
         let gps_reading = Vector3f32 { x: 14.0, y: 20.0, z: 36.0 };
 
         // Run the refactored multidimensional update logic
-        filter.correct_position_using_gps(gps_reading);
+        let r_gps_horizontal = 2.0;
+        let r_gps_vertical = 3.0;
+        let r_gps = Vector3f32 { x: r_gps_horizontal, y: r_gps_horizontal, z: r_gps_vertical };
+        filter.correct_position(gps_reading, r_gps);
 
         // Verify Position Updates: New = Old + (K_pos * Error)
         // Expected X pos = 10.0 + 2.0
@@ -272,11 +264,6 @@ mod covariance_prediction_tests {
             }),
             q_velocity: 1.0, // Q_vel noise = 1.0
             q_bias: 0.0,
-            r_gps_horizontal: 1.0,
-            r_gps_vertical: 1.0,
-            r_barometer: 1.0,
-            r_rangefinder: 0.0,
-            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
         };
 
         // Propagate forward with a time step of dt = 0.5 seconds
@@ -352,11 +339,6 @@ mod matrix_9x9_validation_tests {
             E: Matrix9x9f32::new([1.0; 81]), // Every variance and covariance is 1.0
             q_velocity: 2.0,
             q_bias: 0.5,
-            r_gps_horizontal: 1.0,
-            r_gps_vertical: 1.0,
-            r_barometer: 1.0,
-            r_rangefinder: 1.0,
-            r_optical_flow: Vector3f32::default(),
         };
 
         let dt = 0.5;

@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use sensor_fusion::PositionKalmanFilter;
+    use sensor_fusion::{PositionKalmanFilter, PositionKalmanFilterExtended};
     use vqm::{Matrix9x9f32, Vector3f32};
 
     /// Helper to verify a column-major Matrix9x9 is perfectly symmetric.
@@ -63,7 +63,7 @@ mod tests {
         }
 
         // Instantiate actual filter structure with real hyperparameters
-        let mut filter = PositionKalmanFilter {
+        let filter_base = PositionKalmanFilter {
             pos: Vector3f32 { x: 0.0, y: 0.0, z: 10.0 }, // 10m Altitude
             vel: Vector3f32 { x: 0.0, y: 0.0, z: 2.0 },  // 2 m/s ascending
             acc_bias: Vector3f32 { x: 0.01, y: -0.01, z: 0.0 },
@@ -71,13 +71,15 @@ mod tests {
             E: Matrix9x9f32::default(),
             q_velocity: 0.05,
             q_bias: 0.001,
+        };
+        let mut filter = PositionKalmanFilterExtended {
+            base: filter_base,
             r_gps_horizontal: 0.02,
             r_gps_vertical: 0.05,
             r_barometer: 0.1,
             r_rangefinder: 0.01,
             r_optical_flow: Vector3f32 { x: 0.05, y: 0.05, z: 0.0 },
         };
-
         let dt = 0.01; // 100Hz IMU loop stride
         let total_timesteps = 50;
 
@@ -86,18 +88,18 @@ mod tests {
         for step in 1..=total_timesteps {
             // Copy active P matrix to E using public column iterators to establish a baseline
             {
-                let mut e_cols = filter.E.iter_columns_mut();
-                for p_col in filter.P.iter_columns() {
+                let mut e_cols = filter.base.E.iter_columns_mut();
+                for p_col in filter.base.P.iter_columns() {
                     *e_cols.next().unwrap() = *p_col;
                 }
             }
 
             // Execute predict code
-            filter.predict_covariance(dt);
+            filter.base.predict_covariance(dt);
 
             // Run structural integrity assertions.
-            assert_positive_diagonal(&filter.P);
-            assert_matrix_symmetry(&filter.P, 2e-2);
+            assert_positive_diagonal(&filter.base.P);
+            assert_matrix_symmetry(&filter.base.P, 2e-2);
 
             if step % 10 == 0 {
                 println!("Timestep {:02}: Integrity OK. State Vector and Covariance Trace running smoothly.", step);
@@ -110,14 +112,14 @@ mod tests {
             Vector3f32 { x: filter.r_gps_horizontal, y: filter.r_gps_horizontal, z: filter.r_gps_vertical };
 
         // Ensure validate_measurement hooks up correctly using the real filter instance parameters
-        let is_valid = filter.validate_measurement(y_innovation, R_gps_noise, 7.815);
+        let is_valid = filter.base.validate_measurement(y_innovation, R_gps_noise, 7.815);
         assert!(is_valid, "Valid sensory update was incorrectly rejected by gating limits.");
     }
 }
 
 #[cfg(test)]
 mod correction_tests {
-    use sensor_fusion::PositionKalmanFilter;
+    use sensor_fusion::{PositionKalmanFilter, PositionKalmanFilterExtended};
     use vqm::{Matrix9x9f32, Vector3f32};
 
     fn get_diagonal(matrix: &Matrix9x9f32) -> [f32; 9] {
@@ -151,7 +153,7 @@ mod correction_tests {
             }
         }
 
-        let mut filter = PositionKalmanFilter {
+        let filter_base = PositionKalmanFilter {
             pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
@@ -159,6 +161,9 @@ mod correction_tests {
             E: Matrix9x9f32::default(),
             q_velocity: 0.05,
             q_bias: 0.001,
+        };
+        let mut filter = PositionKalmanFilterExtended {
+            base: filter_base,
             r_gps_horizontal: 0.04,
             r_gps_vertical: 0.09,
             r_barometer: 0.25,
@@ -170,7 +175,7 @@ mod correction_tests {
         println!("DIAGNOSTIC TRACE: MULTI-SENSOR CORRECTION PIPELINE");
         println!("====================================================");
 
-        let diag_initial = get_diagonal(&filter.P);
+        let diag_initial = get_diagonal(&filter.base.P);
         println!("Initial Diagonal Variances:       {:?}", diag_initial);
         let pos_var_initial = diag_initial[2];
 
@@ -178,7 +183,7 @@ mod correction_tests {
         let simulated_baro_alt = 10.5;
         filter.correct_altitude_using_barometer(simulated_baro_alt);
 
-        let diag_after_baro = get_diagonal(&filter.P);
+        let diag_after_baro = get_diagonal(&filter.base.P);
         println!("Diagonal After Barometer Update:  {:?}", diag_after_baro);
         let pos_var_after_baro = diag_after_baro[2];
 
@@ -186,7 +191,7 @@ mod correction_tests {
         let simulated_range_alt = 10.42;
         filter.correct_altitude_using_rangefinder(simulated_range_alt);
 
-        let diag_after_range = get_diagonal(&filter.P);
+        let diag_after_range = get_diagonal(&filter.base.P);
         println!("Diagonal After Rangefinder Update: {:?}", diag_after_range);
         let _pos_var_after_range = diag_after_range[2];
 

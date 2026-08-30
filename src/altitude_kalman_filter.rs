@@ -38,12 +38,6 @@ pub struct AltitudeKalmanFilter<T> {
     // --- Hyperparameters & Tuning Constants ---
     q_velocity: T,
     q_bias: T,
-    /// Barometer measurement variance.
-    r_barometer: T,
-    /// Rangefinder measurement variance.
-    r_rangefinder: T,
-    /// GPS measurement variance.
-    r_gps: T,
 }
 
 impl<T> Default for AltitudeKalmanFilter<T>
@@ -84,9 +78,6 @@ where
             beta: T::ZERO,
             q_velocity: Self::Q1,
             q_bias: Self::Q3,
-            r_barometer: T::ZERO,
-            r_rangefinder: T::ZERO,
-            r_gps: T::ZERO,
             E: Matrix3x3::ZERO,
             P: Matrix3x3::ZERO,
         }
@@ -98,14 +89,7 @@ where
     T: Copy + ConstZero + ConstOne + FloatCore + SqrtMethods + Matrix3x3Math + AltitudeKalmanFilterConstants,
 {
     /// Initializer targeting steady-state baseline parameters.
-    pub fn new_steady_state(
-        initial_altitude: T,
-        q_velocity: T,
-        q_bias: T,
-        r_barometer: T,
-        r_rangefinder: T,
-        r_gps: T,
-    ) -> Self {
+    pub fn new_steady_state(initial_altitude: T, q_velocity: T, q_bias: T, r_barometer: T) -> Self {
         // Calculate analytical steady-state variance bounds.
         // Higher sensor noise (R) increases state uncertainty boundaries.
         // Higher process noise (Q) indicates dynamic, fast-changing states.
@@ -129,9 +113,6 @@ where
             beta: T::ONE_TENTH, // Damping factor configuration baseline
             q_velocity,
             q_bias,
-            r_barometer,
-            r_rangefinder,
-            r_gps,
         }
     }
 
@@ -229,37 +210,23 @@ where
         self.predicted = self.estimated;
         self.P = self.E;
     }
-
-    /// Phase 2: Correct altitude using the barometer measurement.
-    #[inline]
-    pub fn correct_altitude_using_barometer(&mut self, altitude: T) {
-        self.correct_altitude(altitude, self.r_barometer);
-    }
-
-    /// Phase 2: Correct altitude using the rangefinder measurement.
-    #[inline]
-    pub fn correct_altitude_using_rangefinder(&mut self, altitude: T) {
-        self.correct_altitude(altitude, self.r_barometer);
-    }
-    /// Phase 2: Correct altitude using GPS vertical measurement.
-    #[inline]
-    pub fn correct_altitude_using_gps(&mut self, altitude: T) {
-        self.correct_altitude(altitude, self.r_gps);
-    }
 }
 
 #[cfg(test)]
-mod tests {
+mod test_traits {
     use super::*;
-    use vqm::{Matrix3x3f32, Vector3f32};
 
-    fn _is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
 
     #[test]
     fn normal_types() {
         is_full::<AltitudeKalmanFilterf32>();
     }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vqm::{Matrix3x3f32, Vector3f32};
 
     #[test]
     fn test_new() {

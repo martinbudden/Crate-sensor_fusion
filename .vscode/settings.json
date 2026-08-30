@@ -35,6 +35,7 @@
         "deque",
         "eabi",
         "eabihf",
+        "Extendedf",
         "Filterf",
         "fixedbitset",
         "foldhash",

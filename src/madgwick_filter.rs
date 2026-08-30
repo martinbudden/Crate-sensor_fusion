@@ -193,16 +193,24 @@ where
     }
 }
 
+#[cfg(test)]
+mod test_traits {
+    use super::*;
+
+    fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
+
+    #[test]
+    fn normal_types() {
+        is_full::<MadgwickFilter<f32>>();
+    }
+}
 #[cfg(any(debug_assertions, test))]
 mod tests {
     #![allow(unused)]
-    use crate::FuseAccGyro;
-
     use super::*;
-    use vqm::{Quaternionf32, Vector3f32};
 
-    fn is_normal<T: Sized + Send + Sync + Unpin>() {}
-    fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
+    use crate::FuseAccGyro;
+    use vqm::{Quaternionf32, Vector3f32};
 
     #[test]
     #[allow(clippy::float_cmp)]
@@ -224,11 +232,6 @@ mod tests {
         assert_eq!(error.z, error_z);
         let q_dot2 = Quaternion { w: q.z * error_z, x: -q.y * error_z, y: q.x * error_z, z: -q.w * error_z };
         assert_eq!(q_dot, q_dot2);
-    }
-
-    #[test]
-    fn normal_types() {
-        is_full::<MadgwickFilter<f32>>();
     }
 
     #[test]

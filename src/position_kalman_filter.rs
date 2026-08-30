@@ -40,16 +40,6 @@ pub struct PositionKalmanFilter {
     pub q_velocity: f32,
     /// Process Noise spectral density mapping to Sensor Drift variance.
     pub q_bias: f32,
-    /// Absolute Measurement Noise variance for horizontal GPS channels.
-    pub r_gps_horizontal: f32,
-    /// Absolute Measurement Noise variance for vertical GPS channels.
-    pub r_gps_vertical: f32,
-    /// Absolute Measurement Noise variance for barometric pressure altimeter.
-    pub r_barometer: f32,
-    /// Absolute Measurement Noise variance for rangefinder.
-    pub r_rangefinder: f32,
-    /// Absolute Measurement Noise variance for optical flow.
-    pub r_optical_flow: Vector3f32,
 }
 
 impl Default for PositionKalmanFilter {
@@ -77,11 +67,6 @@ impl PositionKalmanFilter {
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             q_velocity: 0.0,
             q_bias: 0.0,
-            r_gps_horizontal: 0.0,
-            r_gps_vertical: 0.0,
-            r_barometer: 0.0,
-            r_rangefinder: 0.0,
-            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             E: Matrix9x9f32::new([0.0; 81]),
             P: Matrix9x9f32::new([0.0; 81]),
         }
@@ -282,24 +267,6 @@ impl PositionKalmanFilter {
         self.P = self.E;
     }
 
-    /// Phase 2: Correct altitude using the barometer measurement.
-    #[inline]
-    pub fn correct_altitude_using_barometer(&mut self, altitude: f32) {
-        self.correct_altitude(altitude, self.r_barometer);
-    }
-
-    /// Phase 2: Correct altitude using the rangefinder measurement.
-    #[inline]
-    pub fn correct_altitude_using_rangefinder(&mut self, altitude: f32) {
-        self.correct_altitude(altitude, self.r_rangefinder);
-    }
-
-    /// Phase 2: Correct altitude using GPS vertical measurement.
-    #[inline]
-    pub fn correct_altitude_using_gps(&mut self, altitude: f32) {
-        self.correct_altitude(altitude, self.r_gps_vertical);
-    }
-
     /// Executes an asynchronous measurement update when a new 3D GPS reading arrives
     /// (typically at a slower 1Hz to 10Hz rate).
     /// The error becomes a 3D vector, and the 3D Position, Velocity, and Accelerometer Bias states.
@@ -358,17 +325,6 @@ impl PositionKalmanFilter {
 
         // Synchronize the active covariance state for the next prediction phase
         self.P = self.E;
-    }
-
-    /// Phase 2: Correct position using GPS position measurement (typically at a 1Hz to 10Hz rate).
-    pub fn correct_position_using_gps(&mut self, position: Vector3f32) {
-        let r_gps = Vector3f32 { x: self.r_gps_horizontal, y: self.r_gps_horizontal, z: self.r_gps_vertical };
-        self.correct_position(position, r_gps);
-    }
-
-    /// Phase 2: Correct position using optical flow position measurement.
-    pub fn correct_position_using_optical_flow(&mut self, position: Vector3f32) {
-        self.correct_position(position, self.r_optical_flow);
     }
 
     /// Reassembles the `K_pos`, `K_vel`, and `K_acc_bias` 3x3 matrices into a 9x9 matrix
@@ -574,7 +530,7 @@ impl PositionKalmanFilter {
 }
 
 #[cfg(test)]
-mod tests {
+mod test_traits {
     use super::*;
 
     fn _is_normal<T: Sized + Send + Sync + Unpin>() {}

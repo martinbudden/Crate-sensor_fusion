@@ -113,19 +113,22 @@ where
     }
 }
 
-#[cfg(any(debug_assertions, test))]
-mod tests {
-    #![allow(unused)]
+#[cfg(test)]
+mod test_traits {
     use super::*;
-    use vqm::{Quaternionf32, Vector3f32};
 
-    fn _is_normal<T: Sized + Send + Sync + Unpin>() {}
     fn is_full<T: Sized + Send + Sync + Unpin + Copy + Clone + Default + PartialEq>() {}
 
     #[test]
     fn normal_types() {
         is_full::<ComplementaryFilter<f32>>();
     }
+}
+#[cfg(any(debug_assertions, test))]
+mod tests {
+    #![allow(unused)]
+    use super::*;
+    use vqm::{Quaternionf32, Vector3f32};
 
     #[test]
     fn update_orientation() {

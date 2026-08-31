@@ -95,7 +95,7 @@ mod tests {
             }
 
             // Execute predict code
-            filter.base.predict_covariance(dt);
+            filter.predict_covariance(dt);
 
             // Run structural integrity assertions.
             assert_positive_diagonal(&filter.base.P);

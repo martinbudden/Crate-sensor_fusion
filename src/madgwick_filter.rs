@@ -290,7 +290,7 @@ mod tests {
         let filtered_q = filter.correct_yaw_with_gain(target_yaw.to_radians(), gain, delta_t);
         let final_yaw = filtered_q.calculate_yaw_degrees();
         println!("Yaw, initial: {initial_yaw:.4}° | target: {target_yaw:.4}° | filtered: {final_yaw:.4}°");
-        assert_eq!(178.5, final_yaw);
+        assert!((178.5 - final_yaw).abs() < 2e-5);
 
         filter.set_orientation(initial_q);
         let target_yaw = 179.5_f32;

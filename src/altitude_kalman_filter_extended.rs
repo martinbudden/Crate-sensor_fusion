@@ -1,5 +1,5 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::Matrix3x3Math;
+use vqm::{Matrix3x3Math, SqrtMethods, Vector3};
 
 use super::{AltitudeKalmanFilter, altitude_kalman_filter::AltitudeKalmanFilterConstants};
 
@@ -36,6 +36,15 @@ where
     #[must_use]
     pub const fn new() -> Self {
         Self { base: AltitudeKalmanFilter::new(), r_barometer: T::ZERO, r_rangefinder: T::ZERO, r_gps: T::ZERO }
+    }
+}
+
+impl<T> AltitudeKalmanFilterExtended<T>
+where
+    T: Copy + ConstZero + ConstOne + FloatCore + SqrtMethods + Matrix3x3Math,
+{
+    pub fn predict(&mut self, acceleration_measurement: T, delta_t: T) -> Vector3<T> {
+        self.base.predict(acceleration_measurement, delta_t)
     }
 }
 

@@ -42,6 +42,14 @@ impl PositionKalmanFilter9Extended {
 }
 
 impl PositionKalmanFilter9Extended {
+    pub fn predict_states(&mut self, acc_measurement: Vector3f32, dt: f32) {
+        self.base.predict_states(acc_measurement, dt);
+    }
+
+    pub fn predict_covariance(&mut self, dt: f32) {
+        self.base.predict_covariance(dt);
+    }
+
     /// Phase 2: Correct altitude using the barometer measurement.
     #[inline]
     pub fn correct_altitude_using_barometer(&mut self, altitude: f32) {

@@ -122,7 +122,7 @@ impl SensorFusionMath for f32 {
     #[inline(always)]
     fn madgwick_step_acc(q: Quaternion<Self>, acc: Vector3<Self>, max_acc_magnitude_squared: Self) -> Quaternion<Self> {
         use num_traits::Zero;
-        use vqm::SqrtMethods;
+        use vqm::MathMethods;
 
         let acc_magnitude_squared = acc.norm_squared();
         // Acceleration is an unreliable indicator of orientation when in high-g maneuvers,
@@ -187,7 +187,7 @@ impl SensorFusionMath for f32 {
         max_acc_magnitude_squared: Self,
     ) -> Quaternion<Self> {
         use num_traits::Zero;
-        use vqm::SqrtMethods;
+        use vqm::MathMethods;
 
         let acc_magnitude_squared = acc.norm_squared();
         // Acceleration is an unreliable indicator of orientation when in high-g maneuvers,
@@ -292,7 +292,7 @@ impl SensorFusionMath for f64 {
     #[inline(always)]
     fn madgwick_step_acc(q: Quaternion<Self>, acc: Vector3<Self>, max_acc_magnitude_squared: Self) -> Quaternion<Self> {
         use num_traits::Zero;
-        use vqm::SqrtMethods;
+        use vqm::MathMethods;
 
         let acc_magnitude_squared = acc.norm_squared();
         // Acceleration is an unreliable indicator of orientation when in high-g maneuvers,

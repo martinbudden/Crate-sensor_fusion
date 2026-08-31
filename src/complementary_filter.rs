@@ -2,7 +2,7 @@ use core::ops::Neg;
 use num_traits::{One, Zero, float::FloatCore};
 
 use crate::{SensorFusion, SensorFusionMath};
-use vqm::{Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3};
+use vqm::{MathMethods, Quaternion, QuaternionMath, Vector3};
 
 /// Complementary filter for `f32`<br>
 pub type ComplementaryFilterf32 = ComplementaryFilter<f32>;
@@ -44,7 +44,7 @@ where
 
 impl<T> ComplementaryFilter<T>
 where
-    T: Copy + One + Zero + Neg<Output = T> + TrigonometricMethods + SqrtMethods,
+    T: Copy + One + Zero + Neg<Output = T> + MathMethods,
 {
     /// Calculate roll (theta) from the normalized accelerometer readings.
     pub fn roll_radians_from_acc_normalized(acc: Vector3<T>) -> T {
@@ -61,7 +61,7 @@ where
 
 impl<T> SensorFusion<T> for ComplementaryFilter<T>
 where
-    T: Copy + FloatCore + TrigonometricMethods + SqrtMethods + QuaternionMath + SensorFusionMath,
+    T: Copy + FloatCore + MathMethods + QuaternionMath + SensorFusionMath,
 {
     fn set_gains(&mut self, gain0: T, _gain1: T) {
         self.alpha = gain0;

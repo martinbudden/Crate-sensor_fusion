@@ -1,6 +1,6 @@
 use crate::{SensorFusion, SensorFusionMath};
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::{Quaternion, QuaternionMath, SqrtMethods, TrigonometricMethods, Vector3};
+use vqm::{MathMethods, Quaternion, QuaternionMath, Vector3};
 
 /// Madgwick filter for `f32`<br>
 pub type MadgwickFilterf32 = MadgwickFilter<f32>;
@@ -78,7 +78,7 @@ impl<T: Copy> MadgwickFilter<T> {
 }
 impl<T> MadgwickFilter<T>
 where
-    T: Copy + FloatCore + QuaternionMath + SqrtMethods + SensorFusionMath + TrigonometricMethods,
+    T: Copy + FloatCore + QuaternionMath + SensorFusionMath + MathMethods,
 {
     pub fn correct_yaw(&mut self, yaw_radians: T, delta_t: T) -> Quaternion<T> {
         self.correct_yaw_with_gain(yaw_radians, self.beta_yaw, delta_t)
@@ -101,7 +101,7 @@ where
 ///
 impl<T> SensorFusion<T> for MadgwickFilter<T>
 where
-    T: Copy + FloatCore + QuaternionMath + SqrtMethods + SensorFusionMath + TrigonometricMethods,
+    T: Copy + FloatCore + QuaternionMath + SensorFusionMath + MathMethods,
 {
     fn set_gains(&mut self, gain0: T, gain1: T) {
         self.beta = gain0;

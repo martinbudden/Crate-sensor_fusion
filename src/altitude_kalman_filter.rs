@@ -1,5 +1,5 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::{Matrix3x3, Matrix3x3Math, SqrtMethods, Vector3};
+use vqm::{MathMethods, Matrix3x3, Matrix3x3Math, Vector3};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
 pub type AltitudeKalmanFilterf32 = AltitudeKalmanFilter<f32>;
@@ -86,7 +86,7 @@ where
 
 impl<T> AltitudeKalmanFilter<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + SqrtMethods + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math + AltitudeKalmanFilterConstants,
 {
     /// Initializer targeting steady-state baseline parameters.
     pub fn new_steady_state(initial_altitude: T, q_velocity: T, q_bias: T, r_barometer: T) -> Self {
@@ -134,7 +134,7 @@ where
 
 impl<T> AltitudeKalmanFilter<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + SqrtMethods + Matrix3x3Math,
+    T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
     /// Phase 1: Predict state forward using IMU/Physics
     /// Call this at your IMU frequency or fixed control loop rate.

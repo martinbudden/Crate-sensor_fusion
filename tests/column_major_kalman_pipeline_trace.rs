@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use sensor_fusion::{PositionKalmanFilter, PositionKalmanFilterExtended};
+    use sensor_fusion::{PositionKalmanFilterDeprecated, PositionKalmanFilterDeprecatedExtended};
     use vqm::{Matrix9x9f32, Vector3f32};
 
     /// Helper to verify a column-major Matrix9x9 is perfectly symmetric.
@@ -63,7 +63,7 @@ mod tests {
         }
 
         // Instantiate actual filter structure with real hyperparameters
-        let filter_base = PositionKalmanFilter {
+        let filter_base = PositionKalmanFilterDeprecated {
             pos: Vector3f32 { x: 0.0, y: 0.0, z: 10.0 }, // 10m Altitude
             vel: Vector3f32 { x: 0.0, y: 0.0, z: 2.0 },  // 2 m/s ascending
             acc_bias: Vector3f32 { x: 0.01, y: -0.01, z: 0.0 },
@@ -72,7 +72,7 @@ mod tests {
             q_velocity: 0.05,
             q_bias: 0.001,
         };
-        let mut filter = PositionKalmanFilterExtended {
+        let mut filter = PositionKalmanFilterDeprecatedExtended {
             base: filter_base,
             r_gps_horizontal: 0.02,
             r_gps_vertical: 0.05,
@@ -119,7 +119,7 @@ mod tests {
 
 #[cfg(test)]
 mod correction_tests {
-    use sensor_fusion::{PositionKalmanFilter, PositionKalmanFilterExtended};
+    use sensor_fusion::{PositionKalmanFilterDeprecated, PositionKalmanFilterDeprecatedExtended};
     use vqm::{Matrix9x9f32, Vector3f32};
 
     fn get_diagonal(matrix: &Matrix9x9f32) -> [f32; 9] {
@@ -153,7 +153,7 @@ mod correction_tests {
             }
         }
 
-        let filter_base = PositionKalmanFilter {
+        let filter_base = PositionKalmanFilterDeprecated {
             pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
@@ -162,7 +162,7 @@ mod correction_tests {
             q_velocity: 0.05,
             q_bias: 0.001,
         };
-        let mut filter = PositionKalmanFilterExtended {
+        let mut filter = PositionKalmanFilterDeprecatedExtended {
             base: filter_base,
             r_gps_horizontal: 0.04,
             r_gps_vertical: 0.09,

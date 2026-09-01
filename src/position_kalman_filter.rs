@@ -1,8 +1,6 @@
-use vqm::{Matrix3x3f32, Matrix9x9f32, Vector3f32};
+use vqm::{Matrix3x3f32, Matrix9, Matrix9f32, Vector3f32};
 
-use crate::KalmanStateVector9f32;
-
-/// `f32` variant of `PositionKalmanFilter`.
+/// `f32` variant of `PositionKalmanFilter0`.
 pub type PositionKalmanFilterf32 = PositionKalmanFilter;
 
 /// The system is split into two cleanly decoupled steps. This:
@@ -31,9 +29,9 @@ pub struct PositionKalmanFilter {
     pub acc_bias: Vector3f32,
 
     /// Predicted System Uncertainty Covariance Matrix (P).
-    pub P: Matrix9x9f32,
+    pub P: Matrix9f32,
     /// Estimated Post-Correction Error Covariance Matrix (E).
-    pub E: Matrix9x9f32,
+    pub E: Matrix9f32,
 
     // --- Hyperparameters & Tuning Constants ---
     /// Process Noise spectral density mapping to Velocity variance.
@@ -52,23 +50,42 @@ impl Default for PositionKalmanFilter {
 impl PositionKalmanFilter {
     pub const Z_POS_ROW: usize = 2; // H vector selects the 3rd row of P
     pub const Z_POS_COL: usize = 2; // 3rd column corresponds to Z position (Altitude)
-    pub const S_XX: usize = Matrix3x3f32::M11;
-    pub const S_YY: usize = Matrix3x3f32::M22;
-    pub const S_ZZ: usize = Matrix3x3f32::M33;
+
+    const M11: usize = Matrix9f32::M11;
+    const M21: usize = Matrix9f32::M21;
+    const M31: usize = Matrix9f32::M31;
+    const M12: usize = Matrix9f32::M12;
+    const M22: usize = Matrix9f32::M22;
+    const M23: usize = Matrix9f32::M23;
+    const M13: usize = Matrix9f32::M13;
+    const M32: usize = Matrix9f32::M32;
+    const M33: usize = Matrix9f32::M33;
+
+    const PP: usize = 0;
+    const VP: usize = 1;
+    const BP: usize = 2;
+
+    const PV: usize = 3;
+    const VV: usize = 4;
+    const BV: usize = 5;
+
+    const PB: usize = 6;
+    const VB: usize = 7;
+    const BB: usize = 8;
 }
 
 impl PositionKalmanFilter {
     /// Constructor.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             q_velocity: 0.0,
             q_bias: 0.0,
-            E: Matrix9x9f32::new([0.0; 81]),
-            P: Matrix9x9f32::new([0.0; 81]),
+            E: Matrix9f32::default(),
+            P: Matrix9f32::default(),
         }
     }
 }
@@ -130,103 +147,76 @@ impl PositionKalmanFilter {
     /// ## Formula
     /// *  `P_k = A * E_k₋₁ * Aᵀ + Q`
     #[allow(non_snake_case)]
-    #[rustfmt::skip]
     pub fn predict_covariance(&mut self, dt: f32) {
-        // Calculate
-        //    P = A * E * A^T + Q
-        // avoiding expensive 9x9 matrix multiplication by splitting the 9x9 matrices into sub-matrices (blocks).
-        let mut P = Matrix9x9f32::default();
-
-        // Instantiate the custom column iterator
-        // so `col_iter` points to the entire matrix: [Col0, Col1, Col2, Col3, Col4, Col5, Col6, Col7, Col8]
-        let mut col_iter = P.iter_columns_mut();
+        // -------------------------------------------------------------------------
+        // E is a 3x3 matrix of 3x3 blocks:
+        //
+        //                  Position   Velocity   Bias
+        //               ┌──────────┬──────────┬──────────┐
+        //      Position │ E[PP]    │ E[PV]    │ E[PB]    │
+        //               ├──────────┼──────────┼──────────┤
+        //      Velocity │ E[VP]    │ E[VV]    │ E[VB]    │
+        //               ├──────────┼──────────┼──────────┤
+        //          Bias │ E[BP]    │ E[BV]    │ E[BB]    │
+        //               └──────────┴──────────┴──────────┘
+        //
+        // -------------------------------------------------------------------------
 
         let one_plus_dt = 1.0 + dt;
         let one_minus_dt = 1.0 - dt;
 
-        // =====================================================================
-        // SECTION 1: POSITION COLUMNS (COLUMNS 0..=2 ( - c ranges 0..3)
-        // =====================================================================
-        // .by_ref() lets us consume 3 items without relinquishing ownership of the iterator
-        // so section 2 will continue where section 1 left off.
-        for (c, P_col) in col_iter.by_ref().take(3).enumerate() {
-            // Loop Iteration 1: c = 0, P_col = &mut Col0
-            // Loop Iteration 2: c = 1, P_col = &mut Col1
-            // Loop Iteration 3: c = 2, P_col = &mut Col2
+        let E = self.P;
+        let mut P = Matrix9f32::default();
 
-            // PositionPosition Block (Rows 0..3)
-            P_col[0] = self.E[c]      + dt * (self.E[c + 3]  * one_plus_dt + self.E[c + 27]);
-            P_col[1] = self.E[c + 9]  + dt * (self.E[c + 12] * one_plus_dt + self.E[c + 36]);
-            P_col[2] = self.E[c + 18] + dt * (self.E[c + 21] * one_plus_dt + self.E[c + 45]);
-
-            // VelocityPosition Block (Rows 3..6)
-            P_col[3] = self.E[c + 27] - dt * (self.E[c + 3]  * one_plus_dt - self.E[c + 54]);
-            P_col[4] = self.E[c + 36] - dt * (self.E[c + 12] * one_plus_dt - self.E[c + 63]);
-            P_col[5] = self.E[c + 45] - dt * (self.E[c + 21] * one_plus_dt - self.E[c + 72]);
-
-            // BiasPosition Block (Rows 6..9)
-            P_col[6] = self.E[c + 54] + dt * self.E[c + 3];
-            P_col[7] = self.E[c + 63] + dt * self.E[c + 12];
-            P_col[8] = self.E[c + 72] + dt * self.E[c + 21];
-        }
         // =====================================================================
-        // SECTION 2: COLUMNS 3..=5 (VELOCITY COLUMNS)
-        // =====================================================================
-        for (c, P_col) in col_iter.by_ref().take(3).enumerate() {
-            // Loop Iteration 1: c = 0, P_col = &mut Col3
-            // Loop Iteration 2: c = 1, P_col = &mut Col4
-            // Loop Iteration 3: c = 2, P_col = &mut Col5
-
-            // PositionVelocity Block (Rows 0..3)
-            P_col[0] = self.E[c + 3]  + dt * (self.E[c + 6]  * one_minus_dt - self.E[c + 30]);
-            P_col[1] = self.E[c + 12] + dt * (self.E[c + 15] * one_minus_dt - self.E[c + 39]);
-            P_col[2] = self.E[c + 21] + dt * (self.E[c + 24] * one_minus_dt - self.E[c + 48]);
-
-            // VelocityVelocity Block (Rows 3..6)
-            P_col[3] = self.E[c + 30] - dt * (self.E[c + 6]  * one_plus_dt + self.E[c + 57]);
-            P_col[4] = self.E[c + 39] - dt * (self.E[c + 15] * one_plus_dt + self.E[c + 66]);
-            P_col[5] = self.E[c + 48] - dt * (self.E[c + 24] * one_plus_dt + self.E[c + 75]);
-
-            // BiasVelocity Block (Rows 6..9)
-            P_col[6] = self.E[c + 57];
-            P_col[7] = self.E[c + 66];
-            P_col[8] = self.E[c + 75];
-        }
-        // =====================================================================
-        // SECTION 3: COLUMNS 6..=8 (BIAS COLUMNS)
-        // =====================================================================
-        // Don't need .by_ref() or take(3), since we are consuming the remainder 3 items of the iterator.
-        for (c, P_col) in col_iter.enumerate() {
-            // Loop Iteration 1: c = 0, P_col = &mut Col6
-            // Loop Iteration 2: c = 1, P_col = &mut Col7
-            // Loop Iteration 3: c = 2, P_col = &mut Col8
-            P_col[0] = self.E[c + 6];
-            P_col[1] = self.E[c + 15];
-            P_col[2] = self.E[c + 24];
-            P_col[3] = self.E[c + 33];
-            P_col[4] = self.E[c + 42];
-            P_col[5] = self.E[c + 51];
-            P_col[6] = self.E[c + 60];
-            P_col[7] = self.E[c + 69];
-            P_col[8] = self.E[c + 78];
-        }
-        // =====================================================================
-        // PROCESS NOISE INJECTION (Additive Q terms on the active diagonals)
+        // POSITION COLUMNS
         // =====================================================================
 
-        // Add Q.
+        // Position / Position
+        P[Self::PP] = E[Self::PP] + dt * (E[Self::VP] * one_plus_dt + E[Self::PV]);
 
-        // Velocity random walk noise maps to diagonal states 4, 5, and 6
+        // Velocity / Position
+        P[Self::VP] = E[Self::PV] - dt * (E[Self::VP] * one_plus_dt - E[Self::PB]);
+
+        // Bias / Position
+        P[Self::BP] = E[Self::PB] + dt * E[Self::VP];
+
+        // =====================================================================
+        // VELOCITY COLUMNS
+        // =====================================================================
+
+        // Position / Velocity
+        P[Self::PV] = E[Self::VP] + dt * (E[Self::BP] * one_minus_dt - E[Self::VV]);
+
+        // Velocity / Velocity
+        P[Self::VV] = E[Self::VV] - dt * (E[Self::BP] * one_plus_dt + E[Self::BV]);
+
+        // Bias / Velocity
+        P[Self::BV] = E[Self::BV];
+
+        // =====================================================================
+        // BIAS COLUMNS
+        // =====================================================================
+
+        P[Self::PB] = E[Self::BP];
+        P[Self::VB] = E[Self::BV];
+        P[Self::BB] = E[Self::BB];
+
+        // =====================================================================
+        // PROCESS NOISE
+        // =====================================================================
+
         let q_velocity_dt2 = self.q_velocity * dt * dt;
-        P[Matrix9x9f32::M44] += q_velocity_dt2;
-        P[Matrix9x9f32::M55] += q_velocity_dt2;
-        P[Matrix9x9f32::M66] += q_velocity_dt2;
 
-        // Accelerometer bias random walk noise maps to diagonal states 7, 8, and 9
+        P[Self::VV][Self::PP] += q_velocity_dt2;
+        P[Self::VV][Self::VV] += q_velocity_dt2;
+        P[Self::VV][Self::BB] += q_velocity_dt2;
+
         let q_bias_dt2 = self.q_bias * dt * dt;
-        P[Matrix9x9f32::M77] += q_bias_dt2;
-        P[Matrix9x9f32::M88] += q_bias_dt2;
-        P[Matrix9x9f32::M99] += q_bias_dt2;
+
+        P[Self::BB][Self::PP] += q_bias_dt2;
+        P[Self::BB][Self::VV] += q_bias_dt2;
+        P[Self::BB][Self::BB] += q_bias_dt2;
 
         self.P = P;
     }
@@ -245,25 +235,28 @@ impl PositionKalmanFilter {
     #[allow(non_snake_case)]
     pub fn correct_altitude(&mut self, altitude: f32, R: f32) {
         // Calculate the scalar innovation covariance: S = P_zz + R
-        let S = self.P[Matrix9x9f32::M33] + R;
+        let S = self.P[Self::PP][Matrix9f32::M33] + R;
 
         // Calculate the 9-element Kalman Gain vector: K = (P * H^T) / S
         // Multiplying P by H^T is mathematically identical to extracting the 3rd column of P
-        let K = KalmanStateVector9f32::from(self.P.column_tuple_vector(Self::Z_POS_COL)) * (1.0 / S);
+        let K_pos = self.P[Self::Z_POS_COL].column(0) * (1.0 / S);
+        let K_vel = self.P[Self::Z_POS_COL].column(1) * (1.0 / S);
+        let K_bias = self.P[Self::Z_POS_COL].column(2) * (1.0 / S);
 
         // Calculate the scalar innovation error
         let error = altitude - self.pos.z;
 
         // Update the state vectors
-        self.pos += K.pos * error;
-        self.vel += K.vel * error;
-        self.acc_bias += K.bias * error;
+        self.pos += K_pos * error;
+        self.vel += K_vel * error;
+        self.acc_bias += K_bias * error;
 
         // Extract the altitude row of P to calculate the error covariance: E = P - K * H * P
-        let altitude_row = KalmanStateVector9f32::from(self.P.row_tuple_vector(Self::Z_POS_ROW));
+        let A0 = self.P[Self::Z_POS_COL].row(0);
+        let A1 = self.P[Self::Z_POS_COL].row(1);
+        let A2 = self.P[Self::Z_POS_COL].row(2);
 
-        // K.outer_product(altitude_row) generates the 9x9 correction matrix
-        self.E = self.P - K.outer_product(altitude_row);
+        self.E = self.P - Matrix9::outer_product(K_pos, K_vel, K_bias, A0, A1, A2);
         self.P = self.E;
     }
 
@@ -290,13 +283,13 @@ impl PositionKalmanFilter {
     #[allow(non_snake_case)]
     pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
         // Extract the PositionPosition 3x3 sub-matrix from the top-left of the 9x9 P matrix.
-        let mut P_pos = Matrix3x3f32::from(self.P);
+        let mut P_pos = self.P[Self::PP];
 
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
         // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
-        P_pos[Self::S_XX] += R.x;
-        P_pos[Self::S_YY] += R.y;
-        P_pos[Self::S_ZZ] += R.z;
+        P_pos[Self::PP] += R.x;
+        P_pos[Self::VV] += R.y;
+        P_pos[Self::BB] += R.z;
 
         // Calculate inverse of S.
         // If S is singular (eg sensor fault), we safely return to prevent a system crash.
@@ -304,10 +297,13 @@ impl PositionKalmanFilter {
             return;
         };
 
-        // Calculate the Kalman Gain: K = (P * H^T) * S_inv, and split it into 3 separate 3x3 matrices.
-        // We do this by extracting the first 3 columns of P, which is mathematically equivalent to calculating P * H^T
-        // and then multiplying by S_inv.
-        let (K_pos, K_vel, K_acc_bias) = Matrix9x9f32::multiply_9x3_by_3x3(&self.P, S_inv);
+        // Calculate the Kalman Gain: K = (P * H^T) * S_inv.
+        //
+        // H selects the position states, so P * H^T is simply the first
+        // three columns of P, represented by the first three Matrix3x3 blocks.
+        let K_pos = self.P[Self::PP] * S_inv;
+        let K_vel = self.P[Self::VP] * S_inv;
+        let K_acc_bias = self.P[Self::BP] * S_inv;
 
         // Calculate the error vector.
         let error = position - self.pos;
@@ -317,8 +313,22 @@ impl PositionKalmanFilter {
         self.vel += K_vel * error;
         self.acc_bias += K_acc_bias * error;
 
-        // Calculate K * (H * P) by re-assembling the 3x3 K_matrices into the 9x9 KH_P matrix.
-        let KH_P = self.reassemble_k_matrices(K_pos, K_vel, K_acc_bias);
+        // Calculate K * (H * P) by re-assembling the 3x3 K_matrices into
+        // the 9x9 KH_P matrix.
+        //
+        // H * P selects the first three rows of P, which correspond to the
+        // block row [P[PP], P[PV], P[PB]].
+        let KH_P = Matrix9::from([
+            K_pos * self.P[Self::PP],
+            K_pos * self.P[Self::PV],
+            K_pos * self.P[Self::PB],
+            K_vel * self.P[Self::PP],
+            K_vel * self.P[Self::PV],
+            K_vel * self.P[Self::PB],
+            K_acc_bias * self.P[Self::PP],
+            K_acc_bias * self.P[Self::PV],
+            K_acc_bias * self.P[Self::PB],
+        ]);
 
         // Update Covariance Matrix: E = P - K * (H * P)
         self.E = self.P - KH_P;
@@ -327,160 +337,98 @@ impl PositionKalmanFilter {
         self.P = self.E;
     }
 
-    /// Reassembles the `K_pos`, `K_vel`, and `K_acc_bias` 3x3 matrices into a 9x9 matrix
-    /// using an optimal column-major layout pipeline.
     #[allow(non_snake_case)]
-    #[rustfmt::skip]
-    #[must_use]
-    pub fn reassemble_k_matrices(
-        &self,
-        K_pos: Matrix3x3f32,
-        K_vel: Matrix3x3f32,
-        K_acc_bias: Matrix3x3f32,
-    ) -> Matrix9x9f32 {
-        let mut KH_P = Matrix9x9f32::default();
-
-        // Cache all the K matrix columns in registers.
-        let mut kp_iter = K_pos.iter_columns();
-        let (Some(kp0), Some(kp1), Some(kp2)) = (kp_iter.next(), kp_iter.next(), kp_iter.next()) else {
-            return KH_P;
-        };
-
-        let mut kv_iter = K_vel.iter_columns();
-        let (Some(kv0), Some(kv1), Some(kv2)) = (kv_iter.next(), kv_iter.next(), kv_iter.next()) else {
-            return KH_P;
-        };
-
-        let mut kb_iter = K_acc_bias.iter_columns();
-        let (Some(kb0), Some(kb1), Some(kb2)) = (kb_iter.next(), kb_iter.next(), kb_iter.next()) else {
-            return KH_P;
-        };
-
-        // Stream column by column through the 9x9 matrices.
-        // Zip the read-only columns of self.P with the mutable output columns of KH_P.
-        let p_cols = self.P.iter_columns();
-        let mut out_cols = KH_P.iter_columns_mut();
-
-        for (P_col, out_col) in p_cols.zip(&mut out_cols) {
-            // H selects rows 0, 1, 2 of the current P column.
-            // These serve as our scalar weights for the linear combination.
-            let p0 = P_col[0];
-            let p1 = P_col[1];
-            let p2 = P_col[2];
-
-            // --- Rows 0..3: Position States (K_pos * v) ---
-            out_col[0] = p0 * kp0[0] + p1 * kp1[0] + p2 * kp2[0];
-            out_col[1] = p0 * kp0[1] + p1 * kp1[1] + p2 * kp2[1];
-            out_col[2] = p0 * kp0[2] + p1 * kp1[2] + p2 * kp2[2];
-
-            // --- Rows 3..6: Velocity States (K_vel * v) ---
-            out_col[3] = p0 * kv0[0] + p1 * kv1[0] + p2 * kv2[0];
-            out_col[4] = p0 * kv0[1] + p1 * kv1[1] + p2 * kv2[1];
-            out_col[5] = p0 * kv0[2] + p1 * kv1[2] + p2 * kv2[2];
-
-            // --- Rows 6..9: Accelerometer Bias States (K_acc_bias * v) ---
-            out_col[6] = p0 * kb0[0] + p1 * kb1[0] + p2 * kb2[0];
-            out_col[7] = p0 * kb0[1] + p1 * kb1[1] + p2 * kb2[1];
-            out_col[8] = p0 * kb0[2] + p1 * kb1[2] + p2 * kb2[2];
-        }
-
-        KH_P
-    }
-}
-
-impl PositionKalmanFilter {
-    /// Performs a numerically stable Joseph Form Covariance Update.
-    /// Formula: `P_new = (I - KH) * P * (I - KH)ᵀ + K * R * Kᵀ`.
-    ///
-    /// Because `H` is a sparse observation matrix selecting only the first 3 rows (position states),
-    ///  we can break the formula down into two efficient operations:
-    /// The `(I - KH) * P` Term: Expressed as`P - KHP` (this subtraction operates perfectly down contiguous column lines).
-    /// The Joseph Term  `K * R * Kᵀ`: since `R` is diagonal this simplifies down to a weighted outer product of the columns of `K`.
-    ///
-    /// Layouts:
-    /// * self.P: 9x9 Column-Major Covariance Matrix
-    /// * `KH_P`: 9x9 Column-Major Matrix from `reassemble_k_matrices`
-    /// * `K_pos`, `K_vel`, `K_acc_bias`: 3x3 Column-Major Kalman Gain blocks
-    /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
-    #[allow(non_snake_case)]
-    #[rustfmt::skip]
-    pub fn joseph_covariance_update(
-        &mut self,
-        KH_P: &Matrix9x9f32,
-        K_pos: &Matrix3x3f32,
-        K_vel: &Matrix3x3f32,
-        K_acc_bias: &Matrix3x3f32,
-        R: Vector3f32,
-    ) {
-        // =====================================================================
-        // Cache all Kalman gain columns for the KRKᵀ outer product
-        // =====================================================================
-        let mut kp_iter = K_pos.iter_columns();
-        let (Some(kp0), Some(kp1), Some(kp2)) = (kp_iter.next(), kp_iter.next(), kp_iter.next()) else { return; };
-
-        let mut kv_iter = K_vel.iter_columns();
-        let (Some(kv0), Some(kv1), Some(kv2)) = (kv_iter.next(), kv_iter.next(), kv_iter.next()) else { return; };
-
-        let mut kb_iter = K_acc_bias.iter_columns();
-        let (Some(kb0), Some(kb1), Some(kb2)) = (kb_iter.next(), kb_iter.next(), kb_iter.next()) else { return; };
-
-        // Construct the full 9x3 Kalman Gain matrix columns directly into registers
-        let K_col0 = [kp0[0], kp0[1], kp0[2], kv0[0], kv0[1], kv0[2], kb0[0], kb0[1], kb0[2]];
-        let K_col1 = [kp1[0], kp1[1], kp1[2], kv1[0], kv1[1], kv1[2], kb1[0], kb1[1], kb1[2]];
-        let K_col2 = [kp2[0], kp2[1], kp2[2], kv2[0], kv2[1], kv2[2], kb2[0], kb2[1], kb2[2]];
-
-        // =====================================================================
-        // Calculate the first order linear term: M = (I - KH)P = P - KH_P
-        // =====================================================================
-        let mut M = Matrix9x9f32::default();
-
-        let P_cols = self.P.iter_columns();
-        let KHP_cols = KH_P.iter_columns();
-        let mut M_cols = M.iter_columns_mut();
-
-        for ((P_col, KH_P_col), M_col) in P_cols.zip(KHP_cols).zip(&mut M_cols) {
-            // Update the data inside the column slice row-by-row
-            M_col[0] = P_col[0] - KH_P_col[0];
-            M_col[1] = P_col[1] - KH_P_col[1];
-            M_col[2] = P_col[2] - KH_P_col[2];
-            M_col[3] = P_col[3] - KH_P_col[3];
-            M_col[4] = P_col[4] - KH_P_col[4];
-            M_col[5] = P_col[5] - KH_P_col[5];
-            M_col[6] = P_col[6] - KH_P_col[6];
-            M_col[7] = P_col[7] - KH_P_col[7];
-            M_col[8] = P_col[8] - KH_P_col[8];
-        }
-
-        // =====================================================================
-        // Complete the Joseph form correction stride
-        // =====================================================================
-        let mut M_col_iter = M.iter_columns();
-        let (Some(m0), Some(m1), Some(m2)) = (M_col_iter.next(), M_col_iter.next(), M_col_iter.next()) else {
+    pub fn correct_position_joseph(&mut self, position: Vector3f32, R: Vector3f32) {
+        let Some(S_inv) = self.P[Self::PP].try_inverse() else {
             return;
         };
+        let K_pos = self.P[Self::PP] * S_inv;
+        let K_vel = self.P[Self::VP] * S_inv;
+        let K_acc_bias = self.P[Self::BP] * S_inv;
 
-        let M_cols_read = M.iter_columns();
-        let KHP_cols_read = KH_P.iter_columns();
-        let mut P_cols_write = self.P.iter_columns_mut();
+        let error = position - self.pos;
 
-        for ((M_col, KH_P_col), P_col) in M_cols_read.zip(KHP_cols_read).zip(&mut P_cols_write) {
-            let kh0 = KH_P_col[0];
-            let kh1 = KH_P_col[1];
-            let kh2 = KH_P_col[2];
+        self.pos += K_pos * error;
+        self.vel += K_vel * error;
+        self.acc_bias += K_acc_bias * error;
 
-            // Run the unrolled matrix update loop across all 9 internal rows
-            for r in 0..9 {
-                // Calculate the core M * (I - KH)ᵀ element value
-                let mut p_updated = M_col[r] - (m0[r] * kh0 + m1[r] * kh1 + m2[r] * kh2);
+        // -------------------------------------------------------------------------
+        // A = (I - KH)P = P - KHP
+        //
+        // H selects the first block row of P:
+        //
+        // H P = [ P[PP], P[Self::PV], P[PB] ]
+        // -------------------------------------------------------------------------
 
-                // Add the additive noise vector components using explicit field names from Vector3f32
-                p_updated += K_col0[r] * R.x * K_col0[r]
-                           + K_col1[r] * R.y * K_col1[r]
-                           + K_col2[r] * R.z * K_col2[r];
+        let P = self.P;
+        let A = Matrix9f32::from([
+            P[Self::PP] - K_pos * P[Self::PP],
+            P[Self::PV] - K_pos * P[Self::PV],
+            P[Self::PB] - K_pos * P[Self::PB],
+            P[Self::VP] - K_vel * P[Self::PP],
+            P[Self::VV] - K_vel * P[Self::PV],
+            P[Self::VB] - K_vel * P[Self::PB],
+            P[Self::BP] - K_acc_bias * P[Self::PP],
+            P[Self::BV] - K_acc_bias * P[Self::PV],
+            P[Self::BB] - K_acc_bias * P[Self::PB],
+        ]);
 
-                P_col[r] = p_updated;
-            }
-        }
+        // -------------------------------------------------------------------------
+        // (I - KH)^T
+        // -------------------------------------------------------------------------
+
+        let I_minus_K_pos_t = (Matrix3x3f32::identity() - K_pos).transpose();
+
+        // -------------------------------------------------------------------------
+        // First Joseph term:
+        //
+        // J = (I - KH)P(I - KH)^T
+        // -------------------------------------------------------------------------
+
+        let K_vel_t = K_vel.transpose();
+        let K_acc_bias_t = K_acc_bias.transpose();
+
+        let J = Matrix9f32::from([
+            A[Self::M11] * I_minus_K_pos_t - A[Self::M12] * K_vel_t - A[Self::M13] * K_acc_bias_t,
+            A[Self::M12],
+            A[Self::M13],
+            A[Self::M21] * I_minus_K_pos_t - A[Self::M22] * K_vel_t - A[Self::M23] * K_acc_bias_t,
+            A[Self::M22],
+            A[Self::M23],
+            A[Self::M31] * I_minus_K_pos_t - A[Self::M32] * K_vel_t - A[Self::M33] * K_acc_bias_t,
+            A[Self::M32],
+            A[Self::M33],
+        ]);
+        // -------------------------------------------------------------------------
+        // K R K^T
+        //
+        // R is diagonal, so this is inexpensive 3x3 block arithmetic.
+        // -------------------------------------------------------------------------
+
+        // -------------------------------------------------------------------------
+        // P_new = J + K R K^T
+        // -------------------------------------------------------------------------
+
+        let K_pos_t = K_pos.transpose();
+        let K_pos_R = K_pos.mul_diag_vector(R);
+        let K_vel_R = K_vel.mul_diag_vector(R);
+        let K_acc_bias_R = K_acc_bias.mul_diag_vector(R);
+
+        let KRK = Matrix9f32::from([
+            K_pos_R * K_pos_t,
+            K_vel_R * K_pos_t,
+            K_acc_bias_R * K_pos_t,
+            K_pos_R * K_vel_t,
+            K_vel_R * K_vel_t,
+            K_acc_bias_R * K_vel_t,
+            K_pos_R * K_acc_bias_t,
+            K_vel_R * K_acc_bias_t,
+            K_acc_bias_R * K_acc_bias_t,
+        ]);
+
+        self.P = J + KRK;
+
+        self.E = self.P;
     }
 }
 
@@ -500,10 +448,13 @@ impl PositionKalmanFilter {
     pub fn validate_measurement(&self, y: Vector3f32, R: Vector3f32, gate_threshold: f32) -> bool {
         // Collect the columns into an array using standard iteration.
         // Collecting exactly 3 items ensures we can pattern match them safely without using `unwrap`.
-        let mut col_iter = self.P.iter_columns();
+        /*let mut col_iter = self.P.iter_columns();
         let (Some(col0), Some(col1), Some(col2)) = (col_iter.next(), col_iter.next(), col_iter.next()) else {
             return false; // Structured pipeline fallback safety
-        };
+        };*/
+        let col0 = self.P.column(0);
+        let col1 = self.P.column(1);
+        let col2 = self.P.column(2);
 
         // H selects position states (rows 0, 1, 2) from columns 0, 1, 2 of matrix P.
         // We pack these into our a Matrix3x3f32.

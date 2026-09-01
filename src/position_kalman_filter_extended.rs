@@ -29,7 +29,7 @@ impl Default for PositionKalmanFilterExtended {
 impl PositionKalmanFilterExtended {
     /// Constructor.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             base: PositionKalmanFilter::new(),
             r_gps_horizontal: 0.0,

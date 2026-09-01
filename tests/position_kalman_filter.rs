@@ -1,4 +1,4 @@
-use sensor_fusion::PositionKalmanFilter;
+use sensor_fusion::PositionKalmanFilterDeprecated;
 use vqm::{Matrix9x9f32, Vector3f32};
 
 #[cfg(test)]
@@ -22,7 +22,7 @@ mod position_filter_tests {
     #[test]
     fn test_barometer_measurement_update() {
         // Initialize a baseline filter instance with realistic test values
-        let mut filter = PositionKalmanFilter {
+        let mut filter = PositionKalmanFilterDeprecated {
             pos: Vector3f32 { x: 10.0, y: 20.0, z: 100.0 }, // Initial Altitude is 100m
             vel: Vector3f32 { x: 1.0, y: 2.0, z: 5.0 },     // Initial Vertical Velocity is 5m/s
             acc_bias: Vector3f32 { x: 0.01, y: 0.02, z: 0.1 }, // Initial Vertical Bias is 0.1m/s²
@@ -94,7 +94,7 @@ mod gps_filter_tests {
     #[test]
     fn test_gps_3d_measurement_update() {
         // Initialize a baseline filter instance with clean, predictable values
-        let mut filter = PositionKalmanFilter {
+        let mut filter = PositionKalmanFilterDeprecated {
             pos: Vector3f32 { x: 10.0, y: 20.0, z: 30.0 },   // Initial Position (m)
             vel: Vector3f32 { x: 1.0, y: 2.0, z: 3.0 },      // Initial Velocity (m/s)
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, // Initial Accelerometer Bias
@@ -174,7 +174,7 @@ mod gps_filter_tests {
     #[test]
     fn test_gps_3d_measurement_update_with_tuple_blocks() {
         // Initialize a baseline filter instance with predictable state variances
-        let mut filter = PositionKalmanFilter {
+        let mut filter = PositionKalmanFilterDeprecated {
             pos: Vector3f32 { x: 10.0, y: 20.0, z: 30.0 },   // Initial Position (m)
             vel: Vector3f32 { x: 1.0, y: 2.0, z: 3.0 },      // Initial Velocity (m/s)
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 }, // Initial Accelerometer Bias
@@ -250,7 +250,7 @@ mod covariance_prediction_tests {
     #[test]
     fn test_covariance_time_propagation() {
         // Setup a filter with an initial error covariance matrix E
-        let mut filter = PositionKalmanFilter {
+        let mut filter = PositionKalmanFilterDeprecated {
             pos: Vector3f32::default(),
             vel: Vector3f32::default(),
             acc_bias: Vector3f32::default(),
@@ -331,7 +331,7 @@ mod matrix_9x9_validation_tests {
     fn test_predict_covariance_with_fully_populated_matrix() {
         // Initialize an E matrix completely packed with 1.0 elements.
         // This tests that our unrolled blocks accumulate every cross-term properly.
-        let mut filter = PositionKalmanFilter {
+        let mut filter = PositionKalmanFilterDeprecated {
             pos: Vector3f32::default(),
             vel: Vector3f32::default(),
             acc_bias: Vector3f32::default(),

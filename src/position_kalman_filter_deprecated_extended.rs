@@ -1,13 +1,13 @@
 use vqm::Vector3f32;
 
-use super::PositionKalmanFilter9;
+use super::PositionKalmanFilterDeprecated;
 
 /// `f32` variant of `PositionKalmanFilterExtended`.
-pub type PositionKalmanFilter9Extendedf32 = PositionKalmanFilter9Extended;
+pub type PositionKalmanFilterDeprecatedExtendedf32 = PositionKalmanFilterDeprecatedExtended;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PositionKalmanFilter9Extended {
-    pub base: PositionKalmanFilter9,
+pub struct PositionKalmanFilterDeprecatedExtended {
+    pub base: PositionKalmanFilterDeprecated,
     /// Absolute Measurement Noise variance for horizontal GPS channels.
     pub r_gps_horizontal: f32,
     /// Absolute Measurement Noise variance for vertical GPS channels.
@@ -20,18 +20,18 @@ pub struct PositionKalmanFilter9Extended {
     pub r_optical_flow: Vector3f32,
 }
 
-impl Default for PositionKalmanFilter9Extended {
+impl Default for PositionKalmanFilterDeprecatedExtended {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl PositionKalmanFilter9Extended {
+impl PositionKalmanFilterDeprecatedExtended {
     /// Constructor.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            base: PositionKalmanFilter9::new(),
+            base: PositionKalmanFilterDeprecated::new(),
             r_gps_horizontal: 0.0,
             r_gps_vertical: 0.0,
             r_barometer: 0.0,
@@ -41,7 +41,7 @@ impl PositionKalmanFilter9Extended {
     }
 }
 
-impl PositionKalmanFilter9Extended {
+impl PositionKalmanFilterDeprecatedExtended {
     pub fn predict_states(&mut self, acc_measurement: Vector3f32, dt: f32) {
         self.base.predict_states(acc_measurement, dt);
     }
@@ -87,7 +87,7 @@ mod test_traits {
 
     #[test]
     fn normal_types() {
-        is_full::<PositionKalmanFilter9Extended>();
-        is_full::<PositionKalmanFilter9Extendedf32>();
+        is_full::<PositionKalmanFilterDeprecatedExtended>();
+        is_full::<PositionKalmanFilterDeprecatedExtendedf32>();
     }
 }

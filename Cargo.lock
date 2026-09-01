@@ -654,8 +654,9 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "vqm"
-version = "0.1.14"
-source = "git+https://github.com/martinbudden/crate-vector-quaternion-matrix#1237f7c612c3b91fc7181fcdce84e0b6c0decb74"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0157e3f66ef66ae242156ab7dfc9a5c286020f6f06672d39efd222c665d24112"
 dependencies = [
  "cfg-if",
  "derive_more",

@@ -5,6 +5,15 @@ use super::PositionKalmanFilter;
 /// `f32` variant of `PositionKalmanFilterExtended`.
 pub type PositionKalmanFilterExtendedf32 = PositionKalmanFilterExtended;
 
+/*
+Desired Physical Noise (σ)            Equivalent R Variance Code Value (σ²)
+5 cm (Ultra-accurate UWB / Laser)     0.0025
+10 cm (High-end Barometer)            0.01
+20 cm (Standard Barometer)            0.04
+50 cm (Precision RTK GPS)             0.25
+1.0 meter (Good Commercial GPS)       1.0
+2.0 meters (Standard Multi-path GPS)  4.0
+*/
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PositionKalmanFilterExtended {
     pub base: PositionKalmanFilter,
@@ -32,18 +41,40 @@ impl PositionKalmanFilterExtended {
     pub fn new() -> Self {
         Self {
             base: PositionKalmanFilter::new(),
-            r_gps_horizontal: 0.0,
-            r_gps_vertical: 0.0,
-            r_barometer: 0.0,
-            r_rangefinder: 0.0,
-            r_optical_flow: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            // Commercial GPS modules are typically accurate to within 1.5 to 3.0 meters horizontally, less vertically.
+            r_gps_horizontal: 2.25,
+            r_gps_vertical: 9.0,
+            // Vertical variance in meters squared
+            // A standard barometric pressure sensor (e.g., BMP280, MS5611) typically has an RMS noise of around 10 to 20 centimeters
+            // which corresponds to a variance of 0.01 to 0.04 m². However, the actual noise can vary based on environmental conditions and sensor quality.
+            r_barometer: 0.03,
+            r_rangefinder: 0.03,
+            r_optical_flow: Vector3f32 { x: 0.04, y: 0.04, z: 0.04 },
         }
     }
 }
 
 impl PositionKalmanFilterExtended {
-    pub fn predict_states(&mut self, acc_measurement: Vector3f32, dt: f32) {
-        self.base.predict_states(acc_measurement, dt);
+    #[inline]
+    #[must_use]
+    pub fn pos(&self) -> Vector3f32 {
+        self.base.pos
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn vel(&self) -> Vector3f32 {
+        self.base.vel
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn acc_bias(&self) -> Vector3f32 {
+        self.base.acc_bias
+    }
+
+    pub fn predict_state(&mut self, acc_measurement: Vector3f32, dt: f32) {
+        self.base.predict_state(acc_measurement, dt);
     }
 
     pub fn predict_covariance(&mut self, dt: f32) {
@@ -51,6 +82,11 @@ impl PositionKalmanFilterExtended {
     }
 
     /// Phase 2: Correct altitude using the barometer measurement.
+    #[inline]
+    pub fn correct_altitude(&mut self, altitude: f32, r: f32) {
+        self.base.correct_altitude(altitude, r);
+    }
+
     #[inline]
     pub fn correct_altitude_using_barometer(&mut self, altitude: f32) {
         self.base.correct_altitude(altitude, self.r_barometer);

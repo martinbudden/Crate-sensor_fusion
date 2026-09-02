@@ -29,8 +29,6 @@ mod altitude_kalman_filter;
 mod altitude_kalman_filter_extended;
 
 mod position_kalman_filter;
-mod position_kalman_filter_deprecated;
-mod position_kalman_filter_deprecated_extended;
 mod position_kalman_filter_extended;
 
 mod sensor_fusion;
@@ -50,10 +48,6 @@ pub use altitude_kalman_filter_extended::{
 
 pub use kalman_state_vector9::{KalmanStateVector9, KalmanStateVector9f32, KalmanStateVector9f64};
 pub use position_kalman_filter::{PositionKalmanFilter, PositionKalmanFilterf32};
-pub use position_kalman_filter_deprecated::{PositionKalmanFilterDeprecated, PositionKalmanFilterDeprecatedf32};
-pub use position_kalman_filter_deprecated_extended::{
-    PositionKalmanFilterDeprecatedExtended, PositionKalmanFilterDeprecatedExtendedf32,
-};
 pub use position_kalman_filter_extended::{PositionKalmanFilterExtended, PositionKalmanFilterExtendedf32};
 
 pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};

@@ -250,7 +250,7 @@ impl PositionKalmanFilterWithR {
 
     /*
      */
-    pub fn correct_position_delayed_hybrid(
+    pub fn correct_position_delayed_with_fast_forward(
         &mut self,
         position: Vector3f32,
         R_gps: Vector3f32,
@@ -277,20 +277,13 @@ impl PositionKalmanFilterWithR {
         // 3. CORRECT: Run your optimized 3D position correction in the past
         self.base.correct_position(position, R_gps);
 
-        // Commit our newly corrected past kinematics back into the match slot
-        self.history[start_idx].pos = self.base.pos;
-        self.history[start_idx].vel = self.base.vel;
-        self.history[start_idx].PP = self.base.P[Self::PP];
-        self.history[start_idx].PV = self.base.P[Self::PV];
-        self.history[start_idx].VV = self.base.P[Self::VV];
-
         // Fast-Forward back to the present, preserving all historical events
         // Assumes a fixed R_baro default or passed variable
         let R_baro = 0.02; // Example default value for Barometer noise variance
         self.fast_forward_timeline(start_idx, dt, R_gps, R_baro);
     }
 
-    pub fn correct_altitude_delayed_hybrid(
+    pub fn correct_altitude_delayed_with_fast_forward(
         &mut self,
         altitude: f32,
         sensor_time: f32,
@@ -314,6 +307,11 @@ impl PositionKalmanFilterWithR {
         // Apply the delayed Barometer correction in the past
         self.correct_altitude(altitude, R_baro);
 
+        // Fast-Forward back to the present, preserving all historical events
+        self.fast_forward_timeline(start_idx, dt, R_gps, R_baro);
+    }
+
+    fn fast_forward_timeline(&mut self, start_idx: usize, dt: f32, R_gps: Vector3f32, R_baro: f32) {
         // Save the corrected past snapshot back into history
         self.history[start_idx].pos = self.base.pos;
         self.history[start_idx].vel = self.base.vel;
@@ -321,11 +319,6 @@ impl PositionKalmanFilterWithR {
         self.history[start_idx].PV = self.base.P[Self::PV];
         self.history[start_idx].VV = self.base.P[Self::VV];
 
-        // Fast-Forward back to the present, preserving all historical events
-        self.fast_forward_timeline(start_idx, dt, R_gps, R_baro);
-    }
-
-    fn fast_forward_timeline(&mut self, start_idx: usize, dt: f32, R_gps: Vector3f32, R_baro: f32) {
         let mut current_idx = (start_idx + 1) % self.history.len();
         let target_idx = (self.head_idx + 1) % self.history.len();
 
@@ -546,7 +539,7 @@ mod tests_delayed {
                     let packet = gps_latency_queue.remove(0);
 
                     // Execute the hybrid rollback, past-correction, and fast-forward sequence
-                    filter.correct_position_delayed_hybrid(packet.position, r_gps, packet.time_stamp, dt);
+                    filter.correct_position_delayed_with_fast_forward(packet.position, r_gps, packet.time_stamp, dt);
                 }
             }
 
@@ -643,7 +636,7 @@ mod tests_downsampled {
                 // Execute hybrid correction on downsampled blocks.
                 // Note: We pass (dt * 2.0) as the replay time-increment step size
                 // because our stored snapshot spacing is doubled!
-                filter.correct_position_delayed_hybrid(packet.position, r_gps, packet.time_stamp, dt);
+                filter.correct_position_delayed_with_fast_forward(packet.position, r_gps, packet.time_stamp, dt);
             }
 
             if step % 100 == 0 && step > 0 {
@@ -763,7 +756,13 @@ mod tests_dual_sensor {
                 let packet = baro_queue.remove(0);
 
                 // Execute time travel update for the barometer
-                filter.correct_altitude_delayed_hybrid(packet.altitude, packet.time_stamp, dt, r_baro, r_gps);
+                filter.correct_altitude_delayed_with_fast_forward(
+                    packet.altitude,
+                    packet.time_stamp,
+                    dt,
+                    r_baro,
+                    r_gps,
+                );
             }
 
             // Step E: Process arriving GPS Packets (150ms delayed)
@@ -773,7 +772,7 @@ mod tests_dual_sensor {
                 let packet = gps_queue.remove(0);
 
                 // Execute time travel update for the GPS
-                filter.correct_position_delayed_hybrid(packet.position, r_gps, packet.time_stamp, dt);
+                filter.correct_position_delayed_with_fast_forward(packet.position, r_gps, packet.time_stamp, dt);
             }
 
             // Periodically log tracking errors to the console

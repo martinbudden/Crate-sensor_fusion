@@ -382,7 +382,7 @@ impl PositionKalmanFilter {
     /// * position: Vector3f32 observation `[x, y, z]`
     /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
     #[allow(non_snake_case)]
-    pub fn correct_position_delayed(&mut self, position: Vector3f32, R: Vector3f32, past_pos:Vector3f32) {
+    pub fn correct_position_delayed(&mut self, position: Vector3f32, R: Vector3f32, past_pos: Vector3f32) {
         // Extract the PositionPosition 3x3 sub-matrix for H * P* H^T
 
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R

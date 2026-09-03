@@ -44,10 +44,11 @@ pub struct PositionKalmanFilter {
     pub P: Matrix9f32,
 
     // --- Hyperparameters & Tuning Constants ---
+    // state transition noise covariance Matrix `Q`
     /// Process Noise spectral density mapping to Velocity variance.
-    pub q_velocity: f32,
+    pub Q_velocity: f32,
     /// Process Noise spectral density mapping to Sensor Drift variance.
-    pub q_bias: f32,
+    pub Q_bias: f32,
 }
 
 impl Default for PositionKalmanFilter {
@@ -102,11 +103,11 @@ impl PositionKalmanFilter {
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             // A value of 0.05 implies that every second, you expect aerodynamic buffeting, vibration, or wind to naturally perturb the velocity
             // by roughly 0.22 m/s ie sqrt(0.05).
-            q_velocity: 0.05,
+            Q_velocity: 0.05,
             //  Sensor bias shifts very slowly due to thermal changes as the silicone heats up.
             //  So this value should be tiny so the filter treats bias as a near-constant,
             // shifting it incrementally over minutes rather than fluctuating on every single vibration loop.
-            q_bias: 1e-4,
+            Q_bias: 1e-4,
             P,
         }
     }
@@ -171,7 +172,7 @@ impl PositionKalmanFilter {
     */
     /// Propagates the 9x9 covariance matrix forward in time.
     ///
-    /// A full 9x9 matrix multiplication involves 729 individual multiplications.
+    /// A full 9x9 matrix multiplication involves 729 individual arithmetic operations.
     /// Instead the matrix is divided into 9 separate 3x3 sub-matrices (blocks),
     /// and each block is processed separately.
     /// ```text
@@ -264,38 +265,38 @@ impl PositionKalmanFilter {
     pub fn predict_covariance(&mut self, dt: f32) {
         let dt2 = dt * dt;
         // Capture the current a posteriori state (P_k₋₁).
-        let E = self.P;
+        let P_old = self.P;
 
         // =====================================================================
         // PROPAGATE THE COVARIANCE (F * P * F^T)
         // =====================================================================
 
         // --- POSITION COLUMNS ---
-        self.P[Self::PP] = E[Self::PP] + (E[Self::VP] + E[Self::PV]) * dt + E[Self::VV] * dt2;
-        self.P[Self::VP] = E[Self::VP] + (E[Self::VV] - E[Self::BP]) * dt - E[Self::BV] * dt2;
-        self.P[Self::BP] = E[Self::BP] + E[Self::BV] * dt;
+        self.P[Self::PP] = P_old[Self::PP] + (P_old[Self::VP] + P_old[Self::PV]) * dt + P_old[Self::VV] * dt2;
+        self.P[Self::VP] = P_old[Self::VP] + (P_old[Self::VV] - P_old[Self::BP]) * dt - P_old[Self::BV] * dt2;
+        self.P[Self::BP] = P_old[Self::BP] + P_old[Self::BV] * dt;
 
         // --- VELOCITY COLUMNS ---
-        self.P[Self::PV] = E[Self::PV] + (E[Self::VV] - E[Self::PB]) * dt - E[Self::VB] * dt2;
-        self.P[Self::VV] = E[Self::VV] - (E[Self::BV] + E[Self::VB]) * dt + E[Self::BB] * dt2;
-        self.P[Self::BV] = E[Self::BV] - E[Self::BB] * dt;
+        self.P[Self::PV] = P_old[Self::PV] + (P_old[Self::VV] - P_old[Self::PB]) * dt - P_old[Self::VB] * dt2;
+        self.P[Self::VV] = P_old[Self::VV] - (P_old[Self::BV] + P_old[Self::VB]) * dt + P_old[Self::BB] * dt2;
+        self.P[Self::BV] = P_old[Self::BV] - P_old[Self::BB] * dt;
 
         // --- BIAS COLUMNS ---
-        self.P[Self::PB] = E[Self::PB] + E[Self::VB] * dt;
-        self.P[Self::VB] = E[Self::VB] - E[Self::BB] * dt;
-        self.P[Self::BB] = E[Self::BB];
+        self.P[Self::PB] = P_old[Self::PB] + P_old[Self::VB] * dt;
+        self.P[Self::VB] = P_old[Self::VB] - P_old[Self::BB] * dt;
+        self.P[Self::BB] = P_old[Self::BB];
 
         // =====================================================================
         // APPLY PROCESS NOISE (Q)
         // =====================================================================
         // Continuous process noise integrated over dt maps primarily to the diagonal variance slots of Velocity and Bias.
 
-        let q_vel = self.q_velocity * dt; // Standard continuous noise integration layout
+        let q_vel = self.Q_velocity * dt; // Standard continuous noise integration layout
         self.P[Self::VV][Self::M11] += q_vel;
         self.P[Self::VV][Self::M22] += q_vel;
         self.P[Self::VV][Self::M33] += q_vel;
 
-        let q_bias_dt = self.q_bias * dt;
+        let q_bias_dt = self.Q_bias * dt;
         self.P[Self::BB][Self::M11] += q_bias_dt;
         self.P[Self::BB][Self::M22] += q_bias_dt;
         self.P[Self::BB][Self::M33] += q_bias_dt;
@@ -321,6 +322,8 @@ impl PositionKalmanFilter {
         // Calculate the scalar innovation covariance: S = P_zz + R
         let S = self.P[Self::PP][Matrix9f32::M33] + R;
 
+        // The the innovation "matrix" `S` may be non-invertible.
+        // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
         if S == 0.0 {
             return; // Avoid division by zero if S is singular
         }
@@ -341,24 +344,24 @@ impl PositionKalmanFilter {
         self.acc_bias += K_bias * error;
 
         // Extract the immutable Z-rows directly onto the CPU stack before any mutations happen
-        let hp_row_pp = self.P[Self::PP].row(2);
-        let hp_row_pv = self.P[Self::PV].row(2);
-        let hp_row_pb = self.P[Self::PB].row(2);
+        let HP_row_pp = self.P[Self::PP].row(2);
+        let HP_row_pv = self.P[Self::PV].row(2);
+        let HP_row_pb = self.P[Self::PB].row(2);
 
         // Column 0: Position Column Blocks
-        self.P[Self::PP] -= Matrix3x3::outer_product(K_pos, hp_row_pp);
-        self.P[Self::VP] -= Matrix3x3::outer_product(K_vel, hp_row_pp);
-        self.P[Self::BP] -= Matrix3x3::outer_product(K_bias, hp_row_pp);
+        self.P[Self::PP] -= Matrix3x3::outer_product(K_pos, HP_row_pp);
+        self.P[Self::VP] -= Matrix3x3::outer_product(K_vel, HP_row_pp);
+        self.P[Self::BP] -= Matrix3x3::outer_product(K_bias, HP_row_pp);
 
         // Column 1: Velocity Column Blocks
-        self.P[Self::PV] -= Matrix3x3::outer_product(K_pos, hp_row_pv);
-        self.P[Self::VV] -= Matrix3x3::outer_product(K_vel, hp_row_pv);
-        self.P[Self::BV] -= Matrix3x3::outer_product(K_bias, hp_row_pv);
+        self.P[Self::PV] -= Matrix3x3::outer_product(K_pos, HP_row_pv);
+        self.P[Self::VV] -= Matrix3x3::outer_product(K_vel, HP_row_pv);
+        self.P[Self::BV] -= Matrix3x3::outer_product(K_bias, HP_row_pv);
 
         // Column 2: Bias Column Blocks
-        self.P[Self::PB] -= Matrix3x3::outer_product(K_pos, hp_row_pb);
-        self.P[Self::VB] -= Matrix3x3::outer_product(K_vel, hp_row_pb);
-        self.P[Self::BB] -= Matrix3x3::outer_product(K_bias, hp_row_pb);
+        self.P[Self::PB] -= Matrix3x3::outer_product(K_pos, HP_row_pb);
+        self.P[Self::VB] -= Matrix3x3::outer_product(K_vel, HP_row_pb);
+        self.P[Self::BB] -= Matrix3x3::outer_product(K_bias, HP_row_pb);
     }
 
     /// Executes an asynchronous measurement update when a new 3D GPS reading arrives
@@ -390,6 +393,8 @@ impl PositionKalmanFilter {
         // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
+        // The the innovation matrix may be non-invertible.
+        // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
         let Some(S_inv) = S.try_inverse() else {
             return;
         };
@@ -448,6 +453,8 @@ impl PositionKalmanFilter {
         // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
+        // The the innovation matrix may be non-invertible.
+        // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
         let Some(S_inv) = S.try_inverse() else {
             return;
         };

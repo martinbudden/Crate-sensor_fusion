@@ -14,19 +14,21 @@ Desired Physical Noise (σ)            Equivalent R Variance Code Value (σ²)
 1.0 meter (Good Commercial GPS)       1.0
 2.0 meters (Standard Multi-path GPS)  4.0
 */
+#[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PositionKalmanFilterExtended {
     pub base: PositionKalmanFilter,
+    // measurement noise covariance Matrix `R`
     /// Absolute Measurement Noise variance for horizontal GPS channels.
-    pub r_gps_horizontal: f32,
+    pub R_gps_horizontal: f32,
     /// Absolute Measurement Noise variance for vertical GPS channels.
-    pub r_gps_vertical: f32,
+    pub R_gps_vertical: f32,
     /// Absolute Measurement Noise variance for barometric pressure altimeter.
-    pub r_barometer: f32,
+    pub R_barometer: f32,
     /// Absolute Measurement Noise variance for rangefinder.
-    pub r_rangefinder: f32,
+    pub R_rangefinder: f32,
     /// Absolute Measurement Noise variance for optical flow.
-    pub r_optical_flow: Vector3f32,
+    pub R_optical_flow: Vector3f32,
     /// Delayed State Buffer for Retrodictive Updates.
     pub history: [Snapshot; Self::SNAPSHOT_SIZE], // Fixed circular window (e.g., handles up to 640ms of latency at 100Hz)
     pub head_idx: usize, // Current write pointer in our ring buffer
@@ -67,14 +69,14 @@ impl PositionKalmanFilterExtended {
         Self {
             base: PositionKalmanFilter::new(),
             // Commercial GPS modules are typically accurate to within 1.5 to 3.0 meters horizontally, less vertically.
-            r_gps_horizontal: 2.25,
-            r_gps_vertical: 9.0,
+            R_gps_horizontal: 2.25,
+            R_gps_vertical: 9.0,
             // Vertical variance in meters squared
             // A standard barometric pressure sensor (e.g., BMP280, MS5611) typically has an RMS noise of around 10 to 20 centimeters
             // which corresponds to a variance of 0.01 to 0.04 m². However, the actual noise can vary based on environmental conditions and sensor quality.
-            r_barometer: 0.03,
-            r_rangefinder: 0.03,
-            r_optical_flow: Vector3f32 { x: 0.04, y: 0.04, z: 0.04 },
+            R_barometer: 0.03,
+            R_rangefinder: 0.03,
+            R_optical_flow: Vector3f32 { x: 0.04, y: 0.04, z: 0.04 },
             history: [Snapshot::default(); Self::SNAPSHOT_SIZE],
             head_idx: 0,
             system_time: 0.0,
@@ -120,29 +122,29 @@ impl PositionKalmanFilterExtended {
 
     #[inline]
     pub fn correct_altitude_using_barometer(&mut self, altitude: f32) {
-        self.base.correct_altitude(altitude, self.r_barometer);
+        self.base.correct_altitude(altitude, self.R_barometer);
     }
 
     /// Phase 2: Correct altitude using the rangefinder measurement.
     #[inline]
     pub fn correct_altitude_using_rangefinder(&mut self, altitude: f32) {
-        self.base.correct_altitude(altitude, self.r_rangefinder);
+        self.base.correct_altitude(altitude, self.R_rangefinder);
     }
 
     /// Phase 2: Correct altitude using GPS vertical measurement.
     #[inline]
     pub fn correct_altitude_using_gps(&mut self, altitude: f32) {
-        self.base.correct_altitude(altitude, self.r_gps_vertical);
+        self.base.correct_altitude(altitude, self.R_gps_vertical);
     }
     /// Phase 2: Correct position using GPS position measurement (typically at a 1Hz to 10Hz rate).
     pub fn correct_position_using_gps(&mut self, position: Vector3f32) {
-        let r_gps = Vector3f32 { x: self.r_gps_horizontal, y: self.r_gps_horizontal, z: self.r_gps_vertical };
+        let r_gps = Vector3f32 { x: self.R_gps_horizontal, y: self.R_gps_horizontal, z: self.R_gps_vertical };
         self.base.correct_position(position, r_gps);
     }
 
     /// Phase 2: Correct position using optical flow position measurement.
     pub fn correct_position_using_optical_flow(&mut self, position: Vector3f32) {
-        self.base.correct_position(position, self.r_optical_flow);
+        self.base.correct_position(position, self.R_optical_flow);
     }
 
     // Inside your main IMU execution loop:

@@ -381,9 +381,8 @@ impl PositionKalmanFilter {
     /// * self.P: 9x9 Column-Major Covariance Matrix
     /// * position: Vector3f32 observation `[x, y, z]`
     /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
-    #[allow(clippy::similar_names)]
     #[allow(non_snake_case)]
-    pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
+    pub fn correct_position_delayed(&mut self, position: Vector3f32, R: Vector3f32, past_pos:Vector3f32) {
         // Extract the PositionPosition 3x3 sub-matrix for H * P* H^T
 
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
@@ -405,7 +404,7 @@ impl PositionKalmanFilter {
         let K_acc_bias = self.P[Self::BP] * S_inv;
 
         // Calculate the error vector.
-        let error = position - self.pos;
+        let error = position - past_pos;
 
         // Update the physical state vectors
         self.pos += K_pos * error;
@@ -436,6 +435,11 @@ impl PositionKalmanFilter {
 
         // Ensure numerical stability by enforcing symmetry on the covariance matrix.
         self.P.enforce_symmetry();
+    }
+
+    #[allow(non_snake_case)]
+    pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
+        self.correct_position_delayed(position, R, self.pos);
     }
 
     /// Joseph's Stabilized Form for the covariance update step:

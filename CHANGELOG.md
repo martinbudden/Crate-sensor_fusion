@@ -15,15 +15,22 @@ Once the API has stabilized this project will adopt semantic versioning, the fir
 
 - May port  **VQF** (Versatile Quaternion Filter) from my C++ library [Library-SensorFusion](https://github.com/martinbudden/Library-SensorFusion).
 
-## [Unreleased]
+## [0.1.10] - 2026-09-xx
 
 ### Added
 
+- first cut of Delayed State Buffer.
+
 ### Changed
+
+- renamed `AltitudeKalmanFilter` to `KalmanFilterX`
+- renamed `AltitudeKalmanFilterExtended` to `KalmanFilterXWithR`
+- renamed `PositionKalmanFilter` to `KalmanFilterXYZ`
+- renamed `PositionKalmanFilterExtended` to `KalmanFilterXYZWithR`
 
 ### Removed
 
-### Deprecated
+- `KalmanStateVector9`.
 
 ### Fixed
 

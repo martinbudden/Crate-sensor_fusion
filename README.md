@@ -10,14 +10,11 @@ Five sensor fusion implementations are available:
 2. Mahony Filter
 3. Madgwick Filter
 4. Altitude Kalman Filter
-5. Position Kalman Filter.
-
-The Madgwick filter has been refactored to be more computationally efficient (and so faster) than
-the standard version used in many implementations, see [Optimization](#opt) below.
+5. 3D Position Kalman Filter.
 
 ## Simple example
 
-Here's a simple example that calculates the orientation by fusing accelerometer and gyro values:
+Here's a simple example that uses a Madgwick filter to calculate the orientation by fusing accelerometer and gyro values:
 
 ```rust
 use sensor_fusion::{MadgwickFilterf32, SensorFusion};
@@ -41,11 +38,10 @@ fn main() {
 }
 ```
 
-The Madgwick filter also supports three-way fusing of accelerometer, gyroscope, and magnetometer readings:
+## Complementary filter
 
-```text
-let orientation = madgwick.fuse_acc_gyro_mag(acc, gyro_rps, mag, dt);
-```
+This has been implemented for reference. It is not recommended for general use:
+both the Mahony filter and the Madgwick filter are faster and don't suffer from gimbal lock.
 
 ## Mahony filter
 
@@ -74,6 +70,48 @@ let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick, dt);
 // or
 let orientation = (acc, gyro_rps, mag).fuse_acc_gyro_mag_using(&mut madgwick, dt);
 ```
+
+## Madgwick Filter
+
+The Madgwick filter has been refactored to be more computationally efficient (and so faster) than
+the standard version used in many implementations, see [Optimization](#opt) below.
+
+The Madgwick filter also supports three-way fusing of accelerometer, gyroscope, and magnetometer readings:
+
+```text
+let orientation = madgwick.fuse_acc_gyro_mag(acc, gyro_rps, mag, dt);
+```
+
+## Position Kalman filter
+
+A Kalman filter works by predicting an object's state using a physical model of the object. So, for example,
+to predict an object's position velocity it uses the measured acceleration and the kinematic equations
+`s = u*t + 0.5*a*t^2` and `v = u + a*t`.
+
+When it obtains a reading for the object's actual position (for example from a GPS) it uses that reading
+to correct the prediction (essentially by taking a weighted average of the predicted state and the reading).
+
+The naive implementation of a 3D Position Kalman filter is extremely computationally intensive.
+
+To predict position using a gyroscope, accelerometer, and magnetometer, you need a massive 18x18 covariance matrix.
+Even if you don't use a magnetometer, you need a 15x15 matrix.
+
+Furthermore, since the gyroscope measurements need to be filtered non-linearly, an Linear Kalman Filter (LKF),
+cannot be used: an Extended Kalman Filter (EKF) is required. An EKF is even more computationally intensive:
+as well as doing the multiplication of these large matrices it also needs to calculate
+[Jacobians](https://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant).
+
+Fortunately there are a number of things that can be done to reduce this computational load.
+
+Firstly we use a sensor fusion filter (ie a Mahony or Madgwick) filter to fuse the gyroscope, accelerometer,
+and (optionally) magnetometer readings into a single acceleration vector. This reduces the covariance matrix to
+more manageable size of 9x9. What's more since the sensor fusion linearizes the sensor input, we can now use an LKF,
+rather than an EKF.
+
+But we are still not out of the woods: multiplying two 9x9 matrices requires 729 individual arithmetic operations.
+And the Kalman filter predict and correct steps each require several matrix operations.
+
+At this point we have two choices.
 
 ## SIMD support
 

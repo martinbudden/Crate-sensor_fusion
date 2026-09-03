@@ -21,7 +21,6 @@
 #![warn(clippy::doc_paragraphs_missing_punctuation)]
 
 mod complementary_filter;
-mod kalman_state_vector9;
 mod madgwick_filter;
 mod mahony_filter;
 
@@ -46,7 +45,6 @@ pub use kalman_filter_z_with_r::{KalmanFilterZWithR, KalmanFilterZWithRf32, Kalm
 
 pub use kalman_filter_with_xyz_r::{KalmanFilterXYZWithR, KalmanFilterXYZWithRf32};
 pub use kalman_filter_xyz::{KalmanFilterXYZ, PositionKalmanFilterf32};
-pub use kalman_state_vector9::{KalmanStateVector9, KalmanStateVector9f32, KalmanStateVector9f64};
 
 pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};
 pub use sensor_fusion_math::SensorFusionMath;

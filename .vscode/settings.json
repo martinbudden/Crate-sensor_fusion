@@ -47,6 +47,7 @@
         "indexmap",
         "itertools",
         "itoa",
+        "Jacobians",
         "Kalman",
         "katex",
         "KRKᵀ",

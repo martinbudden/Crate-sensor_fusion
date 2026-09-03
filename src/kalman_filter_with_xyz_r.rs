@@ -156,26 +156,35 @@ impl KalmanFilterXYZWithR {
 }
 
 /*
-Implementing a Multi-Rate Sensor Delay Buffer (often called a Delayed State Buffer or Retrodictive Update) is the gold standard for high-performance aerospace estimation.
-In a real flight controller, your IMU steps forward instantly at 400Hz. However, your GPS coordinates arrive with a built-in transmission delay of roughly 100 milliseconds (10 steps behind).
-If you apply a delayed GPS measurement to your current 400Hz state, you will inject huge mathematical errors,
-causing your drone to wobble or overshoot its position during rapid maneuvers.
-The solution is to keep a running history of your states and raw inputs,
-rewind time to the exact moment the GPS measurement actually occurred, apply the correction, and then fast-forward the filter back to the present.
+Multi-Rate Sensor Delay Buffer (often called a Delayed State Buffer or Retrodictive Update)
+
+In a flight controller, IMU updates are typically 400Hz - 8kHz. 
+However, your GPS updates are typically at 10Hz.
+
+If we apply a delayed GPS measurement to the much more frequently updated IMU state, will cause errors.
+
+The solution is to keep a running history of the state and sensor inputs,
+rewind time to the exact moment the GPS measurement actually occurred, apply the correction,
+and then fast-forward the filter back to the present.
 
 Past GPS Step Matched] ──► Apply GPS Correction ──► Fast-Forward Predictions ──► [Back to Present]
       ▲                                                      │
-      └─────── (History Window of Cored Data Steps) ─────────┘
+      └─────── (History Window of stored Data Steps) ────────┘
 
-Find the match: Look backward through the history buffer to find the snapshot whose time_stamp matches the arrival epoch of the delayed measurement.
-Rewind: Overwrite your active states (self.pos, self.vel, self.P, etc.) with the contents of that historical snapshot.
-Correct: Run your 3D correct_position code on these reloaded past states using the new sensor data.
-Fast-Forward: Loop forward through the rest of the buffer from that past index back up to the present head_idx,
-re-running predict_state and predict_covariance for every intermediate step.
+The steps are:
+
+* Find the match: Look backward through the history buffer to find the snapshot whose time_stamp matches the arrival of the delayed measurement.
+* Rewind: Overwrite the active states (self.pos, self.vel, self.P, etc.) with the contents of that historical snapshot.
+* Correct: Run the `correct_position` code on these reloaded past states using the new sensor data.
+* Fast-Forward: Loop forward through the rest of the buffer from that past index back up to the present head index,
+  re-running predict_state and predict_covariance for every intermediate step.
 
 
-Critical Edge Cases to Prevent CrashesBuffer Size Overflow:
-If your IMU loops at 400Hz and a sensor has a huge 200ms lag, your history buffer must be at least 0.200 / (1/400) = 80 slots deep.
+Critical Edge Cases to check
+
+Buffer Overflow:
+
+If your IMU loops at 400Hz and a sensor has a 200ms lag, your history buffer must be at least 0.200 / (1/400) = 80 slots deep.
 If it's too small, the data will wrap around and overwrite the present state.
 Always size your buffer array with an extra 20% breathing room.
 

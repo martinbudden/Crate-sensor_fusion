@@ -26,10 +26,10 @@ mod madgwick_filter;
 mod mahony_filter;
 
 mod altitude_kalman_filter;
-mod altitude_kalman_filter_extended;
+mod altitude_kalman_filter_with_r;
 
 mod position_kalman_filter;
-mod position_kalman_filter_extended;
+mod position_kalman_filter_with_r;
 
 mod sensor_fusion;
 mod sensor_fusion_math;
@@ -42,13 +42,13 @@ pub use madgwick_filter::{MadgwickFilter, MadgwickFilterf32, MadgwickFilterf64};
 pub use mahony_filter::{MahonyFilter, MahonyFilterf32, MahonyFilterf64};
 
 pub use altitude_kalman_filter::{AltitudeKalmanFilter, AltitudeKalmanFilterf32, AltitudeKalmanFilterf64};
-pub use altitude_kalman_filter_extended::{
-    AltitudeKalmanFilterExtended, AltitudeKalmanFilterExtendedf32, AltitudeKalmanFilterExtendedf64,
+pub use altitude_kalman_filter_with_r::{
+    AltitudeKalmanFilterWithR, AltitudeKalmanFilterWithRf32, AltitudeKalmanFilterWithRf64,
 };
 
 pub use kalman_state_vector9::{KalmanStateVector9, KalmanStateVector9f32, KalmanStateVector9f64};
 pub use position_kalman_filter::{PositionKalmanFilter, PositionKalmanFilterf32};
-pub use position_kalman_filter_extended::{PositionKalmanFilterExtended, PositionKalmanFilterExtendedf32};
+pub use position_kalman_filter_with_r::{PositionKalmanFilterWithR, PositionKalmanFilterWithRf32};
 
 pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};
 pub use sensor_fusion_math::SensorFusionMath;

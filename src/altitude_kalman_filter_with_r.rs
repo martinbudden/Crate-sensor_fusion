@@ -4,12 +4,12 @@ use vqm::{MathMethods, Matrix3x3Math, Vector3};
 use super::{AltitudeKalmanFilter, altitude_kalman_filter::AltitudeKalmanFilterConstants};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
-pub type AltitudeKalmanFilterExtendedf32 = AltitudeKalmanFilterExtended<f32>;
+pub type AltitudeKalmanFilterWithRf32 = AltitudeKalmanFilterWithR<f32>;
 /// `f64` variant of `AltitudeKalmanFilter`.
-pub type AltitudeKalmanFilterExtendedf64 = AltitudeKalmanFilterExtended<f64>;
+pub type AltitudeKalmanFilterWithRf64 = AltitudeKalmanFilterWithR<f64>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AltitudeKalmanFilterExtended<T> {
+pub struct AltitudeKalmanFilterWithR<T> {
     pub base: AltitudeKalmanFilter<T>,
     /// Barometer measurement variance.
     r_barometer: T,
@@ -19,7 +19,7 @@ pub struct AltitudeKalmanFilterExtended<T> {
     r_gps: T,
 }
 
-impl<T> Default for AltitudeKalmanFilterExtended<T>
+impl<T> Default for AltitudeKalmanFilterWithR<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
 {
@@ -28,7 +28,7 @@ where
     }
 }
 
-impl<T> AltitudeKalmanFilterExtended<T>
+impl<T> AltitudeKalmanFilterWithR<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
 {
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<T> AltitudeKalmanFilterExtended<T>
+impl<T> AltitudeKalmanFilterWithR<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<T> AltitudeKalmanFilterExtended<T>
+impl<T> AltitudeKalmanFilterWithR<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
 {
@@ -78,7 +78,7 @@ mod test_traits {
 
     #[test]
     fn normal_types() {
-        is_full::<AltitudeKalmanFilterExtendedf32>();
-        is_full::<AltitudeKalmanFilterExtendedf64>();
+        is_full::<AltitudeKalmanFilterWithRf32>();
+        is_full::<AltitudeKalmanFilterWithRf64>();
     }
 }

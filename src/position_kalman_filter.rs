@@ -59,9 +59,9 @@ impl Default for PositionKalmanFilter {
 
 #[allow(missing_docs)]
 impl PositionKalmanFilter {
-    pub const M11: usize = Matrix9f32::M11;
-    pub const M22: usize = Matrix9f32::M22;
-    pub const M33: usize = Matrix9f32::M33;
+    const M11: usize = Matrix9f32::M11;
+    const M22: usize = Matrix9f32::M22;
+    const M33: usize = Matrix9f32::M33;
 
     const PP: usize = 0;
     const VP: usize = 1;
@@ -82,17 +82,17 @@ impl PositionKalmanFilter {
     #[must_use]
     pub fn new() -> Self {
         let mut P = Matrix9f32::default();
-        // Seed initial Position uncertainty (e.g., we are confident within 1 meter)
+        // Seed initial Position uncertainty (ie, confident within 1 meter)
         P[Self::PP][Self::M11] = 1.0;
         P[Self::PP][Self::M22] = 1.0;
         P[Self::PP][Self::M33] = 1.0;
 
-        // Seed initial Velocity uncertainty (e.g., confident within 0.5 m/s)
+        // Seed initial Velocity uncertainty (ie, confident within 0.5 m/s)
         P[Self::VV][Self::M11] = 0.25;
         P[Self::VV][Self::M22] = 0.25;
         P[Self::VV][Self::M33] = 0.25;
 
-        // Seed initial Bias uncertainty (e.g., accelerometer bias bounds)
+        // Seed initial Bias uncertainty (ie, accelerometer bias)
         P[Self::BB][Self::M11] = 0.01;
         P[Self::BB][Self::M22] = 0.01;
         P[Self::BB][Self::M33] = 0.01;
@@ -157,7 +157,7 @@ impl PositionKalmanFilter {
         // Physical mechanics
         // s = ut + 0.5 * a * t²
         self.pos += (self.vel + 0.5 * acc_true * dt) * dt;
-        // v = u + at
+        // v = u + a * t
         self.vel += acc_true * dt;
         // Bias remains constant during prediction, it is modeled as a random walk in covariance.
     }
@@ -263,7 +263,6 @@ impl PositionKalmanFilter {
     /// *  `P_k = F * P_k₋₁ * Fᵀ + Q`
     #[allow(non_snake_case)]
     pub fn predict_covariance(&mut self, dt: f32) {
-        let dt2 = dt * dt;
         // Capture the current a posteriori state (P_k₋₁).
         let P_old = self.P;
 
@@ -271,6 +270,10 @@ impl PositionKalmanFilter {
         // PROPAGATE THE COVARIANCE (F * P * F^T)
         // =====================================================================
 
+        // Only 27 arithmetic operations are required to calculate `F * P * F^T`
+        // Compare this with 729 operations just to calculate `F * P` for a full 9x9 matrix multiplication.
+
+        let dt2 = dt * dt;
         // --- POSITION COLUMNS ---
         self.P[Self::PP] = P_old[Self::PP] + (P_old[Self::VP] + P_old[Self::PV]) * dt + P_old[Self::VV] * dt2;
         self.P[Self::VP] = P_old[Self::VP] + (P_old[Self::VV] - P_old[Self::BP]) * dt - P_old[Self::BV] * dt2;
@@ -289,19 +292,13 @@ impl PositionKalmanFilter {
         // =====================================================================
         // APPLY PROCESS NOISE (Q)
         // =====================================================================
-        // Continuous process noise integrated over dt maps primarily to the diagonal variance slots of Velocity and Bias.
+        // Continuous process noise integrated over dt maps to the diagonal variance slots of Velocity and Bias.
 
-        let q_vel = self.Q_velocity * dt; // Standard continuous noise integration layout
-        self.P[Self::VV][Self::M11] += q_vel;
-        self.P[Self::VV][Self::M22] += q_vel;
-        self.P[Self::VV][Self::M33] += q_vel;
+        // Standard continuous noise integration layout
+        self.P[Self::VV].add_diagonal_scalar_in_place(self.Q_velocity * dt);
+        self.P[Self::BB].add_diagonal_scalar_in_place(self.Q_bias * dt);
 
-        let q_bias_dt = self.Q_bias * dt;
-        self.P[Self::BB][Self::M11] += q_bias_dt;
-        self.P[Self::BB][Self::M22] += q_bias_dt;
-        self.P[Self::BB][Self::M33] += q_bias_dt;
-
-        // Time propagation is highly sensitive to asymmetric shearing.
+        // Time propagation is highly sensitive to asymmetric shearing, so enforce symmetry on the covariance matrix.
         self.P.enforce_symmetry();
     }
 }

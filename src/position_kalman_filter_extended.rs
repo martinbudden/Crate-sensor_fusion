@@ -1,4 +1,4 @@
-use vqm::{Matrix3x3f32, Matrix9f32, Vector3f32};
+use vqm::{Matrix3x3f32, Vector3f32};
 
 use super::PositionKalmanFilter;
 
@@ -46,10 +46,6 @@ impl Default for PositionKalmanFilterExtended {
 
 impl PositionKalmanFilterExtended {
     pub const SNAPSHOT_SIZE: usize = 64; // 640ms of history at 100Hz
-
-    pub const M11: usize = Matrix9f32::M11;
-    pub const M22: usize = Matrix9f32::M22;
-    pub const M33: usize = Matrix9f32::M33;
 
     const PP: usize = 0;
     const VP: usize = 1;
@@ -147,7 +143,7 @@ impl PositionKalmanFilterExtended {
         self.base.correct_position(position, self.R_optical_flow);
     }
 
-    // Inside your main IMU execution loop:
+    // Inside the main IMU execution loop (eg gyro_pid loop).
     pub fn handle_imu_tick(&mut self, acc: Vector3f32, dt: f32) {
         // Integrate physical kinematics forward (deterministic)
         self.predict_state(acc, dt);
@@ -189,14 +185,17 @@ you must execute both updates back-to-back inside the same rewind event before f
 #[allow(non_snake_case)]
 impl PositionKalmanFilterExtended {
     /*
-    Strategy 1: The "State-Only Rewind" (Highly Recommended)
-    In a navigation filter, the Kalman Gain \(K\) scales down over time as the filter collects measurements.
+    Strategy 1: The "State-Only Rewind"
+
+    In a Kalman filter, the Kalman Gain `K` scales down over time as the filter collects measurements.
     Because K changes very slowly, you can make a highly accurate engineering trade-off:
     Assume the covariance matrix at the current time is close enough to use for a measurement that happened 100ms ago.
-    Using this approach:You do not rewind P.When a delayed GPS measurement arrives, you calculate the innovation error using the past state vector (pos).
+
+    Using this approach:You do not rewind `P`.When a delayed GPS measurement arrives, you calculate the innovation error using the past state vector (pos).
     You calculate the Kalman Gain vectors using your current active P matrix.
     You correct your current state vector directly.
-    By adopting this strategy, you remove P and acc_raw from the snapshot entirely.
+
+    By adopting this strategy, you remove `P` and `acc_raw` from the snapshot entirely.
     The history snapshot drops from 90 floats down to just 10 floats.
     You no longer need a while loop to fast-forward predictions.
     The delayed update becomes an instantaneous operation executed at the present time step:
@@ -209,10 +208,7 @@ impl PositionKalmanFilterExtended {
         dt: f32,
     ) {
         // Compute Kalman Gain using the PRESENT P matrix
-        let mut S = self.base.P[Self::PP];
-        S[Self::M11] += R.x;
-        S[Self::M22] += R.y;
-        S[Self::M33] += R.z;
+        let S = self.base.P[Self::PP].add_diagonal_vector(R);
 
         let Some(S_inv) = S.try_inverse() else {
             return;

@@ -1,4 +1,4 @@
-use vqm::{Matrix3x3, Matrix3x3f32, Matrix9x3x3, Matrix9x3x3f32, Vector3f32};
+use vqm::{Matrix3x3, Matrix3x3f32, Matrix3x3xM3x3, Matrix3x3xM3x3f32, Vector3f32};
 
 /// `f32` variant of `PositionKalmanFilter0`.
 pub type PositionKalmanFilterf32 = KalmanFilterXYZ;
@@ -41,7 +41,7 @@ pub struct KalmanFilterXYZ {
 
     /// Predicted System Uncertainty Covariance Matrix (P).
     /// **P*: Prediction error covariance (the system's internal uncertainty).
-    pub P: Matrix9x3x3f32,
+    pub P: Matrix3x3xM3x3f32,
 
     // --- Hyperparameters & Tuning Constants ---
     // state transition noise covariance Matrix `Q`
@@ -59,9 +59,9 @@ impl Default for KalmanFilterXYZ {
 
 #[allow(missing_docs)]
 impl KalmanFilterXYZ {
-    const M11: usize = Matrix9x3x3f32::M11;
-    const M22: usize = Matrix9x3x3f32::M22;
-    const M33: usize = Matrix9x3x3f32::M33;
+    const M11: usize = Matrix3x3xM3x3f32::M11;
+    const M22: usize = Matrix3x3xM3x3f32::M22;
+    const M33: usize = Matrix3x3xM3x3f32::M33;
 
     const PP: usize = 0;
     const VP: usize = 1;
@@ -81,7 +81,7 @@ impl KalmanFilterXYZ {
     #[allow(non_snake_case)]
     #[must_use]
     pub fn new() -> Self {
-        let mut P = Matrix9x3x3f32::default();
+        let mut P = Matrix3x3xM3x3f32::default();
         // Seed initial Position uncertainty (ie, confident within 1 meter)
         P[Self::PP][Self::M11] = 1.0;
         P[Self::PP][Self::M22] = 1.0;
@@ -317,7 +317,7 @@ impl KalmanFilterXYZ {
     #[allow(non_snake_case)]
     pub fn correct_altitude(&mut self, altitude: f32, R: f32) {
         // Calculate the scalar innovation covariance: S = P_zz + R
-        let S = self.P[Self::PP][Matrix9x3x3f32::M33] + R;
+        let S = self.P[Self::PP][Matrix3x3xM3x3f32::M33] + R;
 
         // The the innovation "matrix" `S` may be non-invertible.
         // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
@@ -478,7 +478,7 @@ impl KalmanFilterXYZ {
         let I_minus_K_pos_t = Matrix3x3f32::identity() - K_pos_t; // Simplified distribution
 
         // Calculate the columns of intermediate matrix A = (I - KH)P
-        let A = Matrix9x3x3::from_column_array([
+        let A = Matrix3x3xM3x3::from_column_array([
             // Column 0
             self.P[Self::PP] - K_pos * self.P[Self::PP],
             self.P[Self::VP] - K_vel * self.P[Self::PP],
@@ -692,7 +692,7 @@ mod tests {
 
 #[cfg(test)]
 mod tests_position {
-    use super::*; // Pulls in PositionKalmanFilter, Vector3f32, and Matrix9x3x3f32
+    use super::*; // Pulls in PositionKalmanFilter, Vector3f32, and Matrix3x3xM3x3f32
 
     #[test]
     fn test_3d_position_convergence_and_maneuver() {

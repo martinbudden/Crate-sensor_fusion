@@ -25,11 +25,11 @@ mod kalman_state_vector9;
 mod madgwick_filter;
 mod mahony_filter;
 
-mod altitude_kalman_filter;
-mod altitude_kalman_filter_with_r;
+mod kalman_filter_z;
+mod kalman_filter_z_with_r;
 
-mod position_kalman_filter;
-mod position_kalman_filter_with_r;
+mod kalman_filter_with_xyz_r;
+mod kalman_filter_xyz;
 
 mod sensor_fusion;
 mod sensor_fusion_math;
@@ -41,14 +41,12 @@ pub use complementary_filter::{ComplementaryFilter, ComplementaryFilterf32, Comp
 pub use madgwick_filter::{MadgwickFilter, MadgwickFilterf32, MadgwickFilterf64};
 pub use mahony_filter::{MahonyFilter, MahonyFilterf32, MahonyFilterf64};
 
-pub use altitude_kalman_filter::{AltitudeKalmanFilter, AltitudeKalmanFilterf32, AltitudeKalmanFilterf64};
-pub use altitude_kalman_filter_with_r::{
-    AltitudeKalmanFilterWithR, AltitudeKalmanFilterWithRf32, AltitudeKalmanFilterWithRf64,
-};
+pub use kalman_filter_z::{KalmanFilterZ, KalmanFilterZf32, KalmanFilterZf64};
+pub use kalman_filter_z_with_r::{KalmanFilterZWithR, KalmanFilterZWithRf32, KalmanFilterZWithRf64};
 
+pub use kalman_filter_with_xyz_r::{KalmanFilterXYZWithR, KalmanFilterXYZWithRf32};
+pub use kalman_filter_xyz::{KalmanFilterXYZ, PositionKalmanFilterf32};
 pub use kalman_state_vector9::{KalmanStateVector9, KalmanStateVector9f32, KalmanStateVector9f64};
-pub use position_kalman_filter::{PositionKalmanFilter, PositionKalmanFilterf32};
-pub use position_kalman_filter_with_r::{PositionKalmanFilterWithR, PositionKalmanFilterWithRf32};
 
 pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};
 pub use sensor_fusion_math::SensorFusionMath;

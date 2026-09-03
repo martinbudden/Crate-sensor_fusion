@@ -2,23 +2,23 @@ use num_traits::{ConstOne, ConstZero, float::FloatCore};
 use vqm::{MathMethods, Matrix3x3, Matrix3x3Math, Vector3};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
-pub type AltitudeKalmanFilterf32 = AltitudeKalmanFilter<f32>;
+pub type KalmanFilterZf32 = KalmanFilterZ<f32>;
 /// `f64` variant of `AltitudeKalmanFilter`.
-pub type AltitudeKalmanFilterf64 = AltitudeKalmanFilter<f64>;
+pub type KalmanFilterZf64 = KalmanFilterZ<f64>;
 
-pub trait AltitudeKalmanFilterConstants {
+pub trait KalmanFilterZConstants {
     const ONE_HUNDRED: Self;
     const ONE_TENTH: Self;
     const ONE_HUNDREDTH: Self;
 }
 
-impl AltitudeKalmanFilterConstants for f32 {
+impl KalmanFilterZConstants for f32 {
     const ONE_HUNDRED: Self = 100.0;
     const ONE_TENTH: Self = 0.1;
     const ONE_HUNDREDTH: Self = 0.01;
 }
 
-impl AltitudeKalmanFilterConstants for f64 {
+impl KalmanFilterZConstants for f64 {
     const ONE_HUNDRED: Self = 100.0;
     const ONE_TENTH: Self = 0.1;
     const ONE_HUNDREDTH: Self = 0.01;
@@ -26,7 +26,7 @@ impl AltitudeKalmanFilterConstants for f64 {
 
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AltitudeKalmanFilter<T> {
+pub struct KalmanFilterZ<T> {
     predicted: Vector3<T>,
     estimated: Vector3<T>,
     beta: T,
@@ -40,18 +40,18 @@ pub struct AltitudeKalmanFilter<T> {
     q_bias: T,
 }
 
-impl<T> Default for AltitudeKalmanFilter<T>
+impl<T> Default for KalmanFilterZ<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> AltitudeKalmanFilter<T>
+impl<T> KalmanFilterZ<T>
 where
-    T: Copy + ConstOne + AltitudeKalmanFilterConstants,
+    T: Copy + ConstOne + KalmanFilterZConstants,
 {
     /// Q, process noise covariance matrix.
     const Q1: T = T::ONE_HUNDREDTH;
@@ -65,9 +65,9 @@ where
     const _BIAS_ROW: usize = 2;
 }
 
-impl<T> AltitudeKalmanFilter<T>
+impl<T> KalmanFilterZ<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
     /// Constructor.
     #[must_use]
@@ -84,9 +84,9 @@ where
     }
 }
 
-impl<T> AltitudeKalmanFilter<T>
+impl<T> KalmanFilterZ<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math + KalmanFilterZConstants,
 {
     /// Initializer targeting steady-state baseline parameters.
     pub fn new_steady_state(initial_altitude: T, q_velocity: T, q_bias: T, r_barometer: T) -> Self {
@@ -132,7 +132,7 @@ where
 
 // **** Predict ****
 
-impl<T> AltitudeKalmanFilter<T>
+impl<T> KalmanFilterZ<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
@@ -180,9 +180,9 @@ where
 
 // **** Correct ***
 
-impl<T> AltitudeKalmanFilter<T>
+impl<T> KalmanFilterZ<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
     /// Phase 2 Altitude Correction using new measurement.
     #[allow(non_snake_case)]
@@ -220,7 +220,7 @@ mod test_traits {
 
     #[test]
     fn normal_types() {
-        is_full::<AltitudeKalmanFilterf32>();
+        is_full::<KalmanFilterZf32>();
     }
 }
 #[cfg(test)]
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let _kalman_filter = AltitudeKalmanFilterf32::new();
+        let _kalman_filter = KalmanFilterZf32::new();
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
         ]);
 
         // Extract altitude row from the P matrix
-        let altitude_row = p.row(AltitudeKalmanFilterf32::ALTITUDE_ROW);
+        let altitude_row = p.row(KalmanFilterZf32::ALTITUDE_ROW);
         assert_eq!(Vector3f32 { x: 2.0, y: 5.0, z: 11.0 }, altitude_row);
 
         // Calculate the updated Covariance Matrix (E).

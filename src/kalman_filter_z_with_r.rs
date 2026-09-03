@@ -1,16 +1,16 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
 use vqm::{MathMethods, Matrix3x3Math, Vector3};
 
-use super::{AltitudeKalmanFilter, altitude_kalman_filter::AltitudeKalmanFilterConstants};
+use super::{KalmanFilterZ, kalman_filter_z::KalmanFilterZConstants};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
-pub type AltitudeKalmanFilterWithRf32 = AltitudeKalmanFilterWithR<f32>;
+pub type KalmanFilterZWithRf32 = KalmanFilterZWithR<f32>;
 /// `f64` variant of `AltitudeKalmanFilter`.
-pub type AltitudeKalmanFilterWithRf64 = AltitudeKalmanFilterWithR<f64>;
+pub type KalmanFilterZWithRf64 = KalmanFilterZWithR<f64>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AltitudeKalmanFilterWithR<T> {
-    pub base: AltitudeKalmanFilter<T>,
+pub struct KalmanFilterZWithR<T> {
+    pub base: KalmanFilterZ<T>,
     /// Barometer measurement variance.
     r_barometer: T,
     /// Rangefinder measurement variance.
@@ -19,27 +19,27 @@ pub struct AltitudeKalmanFilterWithR<T> {
     r_gps: T,
 }
 
-impl<T> Default for AltitudeKalmanFilterWithR<T>
+impl<T> Default for KalmanFilterZWithR<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> AltitudeKalmanFilterWithR<T>
+impl<T> KalmanFilterZWithR<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
     /// Constructor.
     #[must_use]
     pub const fn new() -> Self {
-        Self { base: AltitudeKalmanFilter::new(), r_barometer: T::ZERO, r_rangefinder: T::ZERO, r_gps: T::ZERO }
+        Self { base: KalmanFilterZ::new(), r_barometer: T::ZERO, r_rangefinder: T::ZERO, r_gps: T::ZERO }
     }
 }
 
-impl<T> AltitudeKalmanFilterWithR<T>
+impl<T> KalmanFilterZWithR<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
@@ -48,9 +48,9 @@ where
     }
 }
 
-impl<T> AltitudeKalmanFilterWithR<T>
+impl<T> KalmanFilterZWithR<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + AltitudeKalmanFilterConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
     /// Phase 2: Correct altitude using the barometer measurement.
     #[inline]
@@ -78,7 +78,7 @@ mod test_traits {
 
     #[test]
     fn normal_types() {
-        is_full::<AltitudeKalmanFilterWithRf32>();
-        is_full::<AltitudeKalmanFilterWithRf64>();
+        is_full::<KalmanFilterZWithRf32>();
+        is_full::<KalmanFilterZWithRf64>();
     }
 }

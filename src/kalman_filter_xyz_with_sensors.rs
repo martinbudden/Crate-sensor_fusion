@@ -3,7 +3,7 @@ use vqm::{Matrix3x3f32, Vector3f32};
 use super::KalmanFilterXYZ;
 
 /// `f32` variant of `PositionKalmanFilterExtended`.
-pub type KalmanFilterXYZWithRf32 = KalmanFilterXYZWithR;
+pub type KalmanFilterXYZWithSensorsf32 = KalmanFilterXYZWithSensors;
 
 /*
 Desired Physical Noise (σ)            Equivalent R Variance Code Value (σ²)
@@ -16,7 +16,7 @@ Desired Physical Noise (σ)            Equivalent R Variance Code Value (σ²)
 */
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct KalmanFilterXYZWithR {
+pub struct KalmanFilterXYZWithSensors {
     pub base: KalmanFilterXYZ,
     // measurement noise covariance Matrix `R`
     /// Absolute Measurement Noise variance for horizontal GPS channels.
@@ -38,13 +38,13 @@ pub struct KalmanFilterXYZWithR {
     pub skip_factor: usize,
 }
 
-impl Default for KalmanFilterXYZWithR {
+impl Default for KalmanFilterXYZWithSensors {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl KalmanFilterXYZWithR {
+impl KalmanFilterXYZWithSensors {
     pub const SNAPSHOT_SIZE: usize = 64; // 640ms of history at 100Hz
 
     const PP: usize = 0;
@@ -83,7 +83,7 @@ impl KalmanFilterXYZWithR {
     }
 }
 
-impl KalmanFilterXYZWithR {
+impl KalmanFilterXYZWithSensors {
     #[inline]
     #[must_use]
     pub fn pos(&self) -> Vector3f32 {
@@ -192,7 +192,7 @@ Correction Cascades: If you receive a Barometer update and a GPS update at the s
 you must execute both updates back-to-back inside the same rewind event before fast-forwarding.
 */
 #[allow(non_snake_case)]
-impl KalmanFilterXYZWithR {
+impl KalmanFilterXYZWithSensors {
     /*
     Strategy 1: The "State-Only Rewind"
 
@@ -364,7 +364,7 @@ impl KalmanFilterXYZWithR {
     }
 }
 
-impl KalmanFilterXYZWithR {
+impl KalmanFilterXYZWithSensors {
     /// Caches the current state of the filter into our history ring buffer.
     /// Run this at the very end of EVERY IMU time update step.
     pub fn push_snapshot(&mut self, acc_raw: Vector3f32, dt: f32) {
@@ -465,8 +465,8 @@ mod test_traits {
 
     #[test]
     fn normal_types() {
-        is_full::<KalmanFilterXYZWithR>();
-        is_full::<KalmanFilterXYZWithRf32>();
+        is_full::<KalmanFilterXYZWithSensors>();
+        is_full::<KalmanFilterXYZWithSensorsf32>();
         is_full::<Snapshot>();
     }
 }
@@ -484,7 +484,7 @@ mod tests_delayed {
     #[test]
     fn test_hybrid_delayed_position_tracking() {
         // 1. Initialize our filter with standard parameters
-        let mut filter = KalmanFilterXYZWithR::new();
+        let mut filter = KalmanFilterXYZWithSensors::new();
 
         let dt = 0.01; // 100Hz internal state update loop
         let r_gps = Vector3f32 { x: 2.25, y: 2.25, z: 9.0 }; // Sensor variance
@@ -593,7 +593,7 @@ mod tests_downsampled {
 
     #[test]
     fn test_downsampled_history_tracking() {
-        let mut filter = KalmanFilterXYZWithR::new();
+        let mut filter = KalmanFilterXYZWithSensors::new();
 
         let dt = 0.01; // 100Hz internal state update loop
         let r_gps = Vector3f32 { x: 2.25, y: 2.25, z: 9.0 };
@@ -693,7 +693,7 @@ mod tests_dual_sensor {
     #[test]
     fn test_dual_sensor_asynchronous_rewind() {
         // 1. Initialize the filter with skip_factor = 2 (50Hz snapshot interval)
-        let mut filter = KalmanFilterXYZWithR::new();
+        let mut filter = KalmanFilterXYZWithSensors::new();
         filter.skip_factor = 2;
 
         let dt = 0.01; // 100Hz IMU execution loop

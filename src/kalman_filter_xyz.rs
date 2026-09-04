@@ -269,9 +269,6 @@ impl KalmanFilterXYZ {
         // PROPAGATE THE COVARIANCE (F * P * F^T)
         // =====================================================================
 
-        // Only 27 arithmetic operations are required to calculate `F * P * F^T`
-        // Compare this with 729 operations just to calculate `F * P` for a full 9x9 matrix multiplication.
-
         let dt2 = dt * dt;
         // --- POSITION COLUMNS ---
         self.P[Self::PP] = P_old[Self::PP] + (P_old[Self::VP] + P_old[Self::PV]) * dt + P_old[Self::VV] * dt2;
@@ -382,10 +379,7 @@ impl KalmanFilterXYZ {
     /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
     #[allow(non_snake_case)]
     pub fn correct_position_delayed(&mut self, position: Vector3f32, R: Vector3f32, past_pos: Vector3f32) {
-        // Extract the PositionPosition 3x3 sub-matrix for H * P* H^T
-
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
-        // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
         // The the innovation matrix may be non-invertible.
@@ -447,10 +441,7 @@ impl KalmanFilterXYZ {
     /// That it ensures the covariance matrix has positive  eigenvalues and remains valid and invertible for future updates.
     #[allow(non_snake_case)]
     pub fn correct_position_joseph(&mut self, position: Vector3f32, R: Vector3f32) {
-        // Extract the PositionPosition 3x3 sub-matrix for H * P* H^T
-
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
-        // In our model, R is a diagonal matrix containing horizontal and vertical sensory noise.
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
         // The the innovation matrix may be non-invertible.
@@ -591,29 +582,28 @@ mod tests {
 
     #[test]
     fn test_filter_convergence_and_ascent() {
-        // 1. Initialize our filter with our validated tuning defaults
         let mut filter = KalmanFilterXYZ::new();
 
-        // Let's capture the initial uncertainty bounds
+        // Capture the initial uncertainty bounds
         let initial_p_pos = filter.P[KalmanFilterXYZ::PP][KalmanFilterXYZ::M33];
-        //let initial_p_vel = filter.P[PositionKalmanFilter::VV][PositionKalmanFilter::M33];
+        // let initial_p_vel = filter.P[PositionKalmanFilter::VV][PositionKalmanFilter::M33];
 
-        // 2. Define simulation parameters
+        // Define simulation parameters
         let dt = 0.01; // 100 Hz simulation step
         let r_baro = 0.04; // 20cm variance for our barometer
 
-        // 3. True Physical States (Sim truths to compare against)
+        // True Physical States (Sim truths to compare against)
         let mut true_pos = Vector3f32::default();
         let mut true_vel = Vector3f32::default();
 
-        // Let's explicitly track a constant real accelerometer bias in the hardware
+        // Explicitly track a constant real accelerometer bias in the hardware
         let true_bias = Vector3f32 { x: 0.02, y: -0.01, z: 0.05 };
 
         // Aerospace NED Gravity vector (Positive down)
         let gravity = Vector3f32 { x: 0.0, y: 0.0, z: 9.80665 };
 
         println!("\n--- PHASE 1: STATIONARY BENCH TEST (2 SECONDS) ---");
-        // During this phase, an IMU resting on a table in an NED frame
+        // During this phase, an IMU resting horizontally on the ground in an NED frame
         // measures an upward reaction force against gravity.
         #[allow(clippy::cast_possible_truncation)]
         let sim_loops_stationary = (2.0 / dt) as i32;
@@ -695,21 +685,21 @@ mod tests_position {
 
     #[test]
     fn test_3d_position_convergence_and_maneuver() {
-        // 1. Initialize the filter with your tuned parameter states
+        // Initialize the filter with your tuned parameter states
         let mut filter = KalmanFilterXYZ::new();
 
         // Capture initial uncertainty variance values from the main diagonal blocks
         let init_p_pos_x = filter.P[KalmanFilterXYZ::PP][KalmanFilterXYZ::M11];
         //let init_p_vel_x = filter.P[PositionKalmanFilter::VV][PositionKalmanFilter::M11];
 
-        // 2. Setup simulation pacing parameters
+        // Setup simulation pacing parameters
         let dt = 0.01; // 100 Hz tracking thread loop
 
         // Define realistic 3D GPS/UWB measurement noise variances (R)
         // Tracks ±1.5m horizontal variance and ±3.0m vertical variance
         let r_gps = Vector3f32 { x: 2.25, y: 2.25, z: 9.0 };
 
-        // 3. Define the ground-truth physical state parameters
+        // Define the ground-truth physical state parameters
         let mut true_pos = Vector3f32 { x: 10.0, y: -5.0, z: 0.0 }; // Start at an offset
         let mut true_vel = Vector3f32::default();
         let true_bias = Vector3f32 { x: -0.03, y: 0.04, z: 0.01 }; // System accelerometer bias
@@ -740,8 +730,8 @@ mod tests_position {
         println!("Stationary -> True Bias X: {:.4}, Estimated Bias X: {:.4}", true_bias.x, filter.acc_bias.x);
 
         // Verification assertions for Phase 1
-        assert!((filter.pos.x - true_pos.x).abs() < 0.05, "Position drifted while stationary!");
-        assert!((filter.vel.x - true_vel.x).abs() < 0.05, "Velocity accumulated noise while stationary!");
+        assert!((filter.pos().x - true_pos.x).abs() < 0.05, "Position drifted while stationary!");
+        assert!((filter.vel().x - true_vel.x).abs() < 0.05, "Velocity accumulated noise while stationary!");
 
         // Ensure covariance has shrunk significantly below the starting bounds
         let post_stat_p_pos_x = filter.P[KalmanFilterXYZ::PP][KalmanFilterXYZ::M11];
@@ -761,11 +751,9 @@ mod tests_position {
             // Raw IMU specific force generation
             let acc_measurement = true_acc_kinematic + true_bias - gravity;
 
-            // Filter state and covariance step updates
             filter.predict_state(acc_measurement, dt);
             filter.predict_covariance(dt);
 
-            // Correct positions asynchronously via full 3D observations
             filter.correct_position(true_pos, r_gps);
         }
 
@@ -776,10 +764,10 @@ mod tests_position {
         println!("Maneuver -> True Final Vel Y: {:.4}, Estimated Final Vel Y: {:.4}", true_vel.y, filter.vel.y);
 
         // Tracking precision assertions
-        assert!((filter.pos.x - true_pos.x).abs() < 0.1, "Filter missed true physical X position track!");
-        assert!((filter.pos.y - true_pos.y).abs() < 0.1, "Filter missed true physical Y position track!");
-        assert!((filter.vel.x - true_vel.x).abs() < 0.1, "Filter velocity tracking tracking failed on X axis!");
-        assert!((filter.vel.y - true_vel.y).abs() < 0.1, "Filter velocity tracking tracking failed on Y axis!");
+        assert!((filter.pos().x - true_pos.x).abs() < 0.1, "Filter missed true physical X position track!");
+        assert!((filter.pos().y - true_pos.y).abs() < 0.1, "Filter missed true physical Y position track!");
+        assert!((filter.vel().x - true_vel.x).abs() < 0.1, "Filter velocity tracking tracking failed on X axis!");
+        assert!((filter.vel().y - true_vel.y).abs() < 0.1, "Filter velocity tracking tracking failed on Y axis!");
 
         println!("\n✅ 3D position state propagation and measurement updates verified successfully!");
     }

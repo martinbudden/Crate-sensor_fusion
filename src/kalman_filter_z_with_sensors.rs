@@ -4,12 +4,12 @@ use vqm::{MathMethods, Matrix3x3Math, Vector3};
 use super::{KalmanFilterZ, kalman_filter_z::KalmanFilterZConstants};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
-pub type KalmanFilterZWithRf32 = KalmanFilterZWithR<f32>;
+pub type KalmanFilterZWithSensorsf32 = KalmanFilterZWithSensors<f32>;
 /// `f64` variant of `AltitudeKalmanFilter`.
-pub type KalmanFilterZWithRf64 = KalmanFilterZWithR<f64>;
+pub type KalmanFilterZWithSensorsf64 = KalmanFilterZWithSensors<f64>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct KalmanFilterZWithR<T> {
+pub struct KalmanFilterZWithSensors<T> {
     pub base: KalmanFilterZ<T>,
     /// Barometer measurement variance.
     r_barometer: T,
@@ -19,7 +19,7 @@ pub struct KalmanFilterZWithR<T> {
     r_gps: T,
 }
 
-impl<T> Default for KalmanFilterZWithR<T>
+impl<T> Default for KalmanFilterZWithSensors<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
@@ -28,7 +28,7 @@ where
     }
 }
 
-impl<T> KalmanFilterZWithR<T>
+impl<T> KalmanFilterZWithSensors<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<T> KalmanFilterZWithR<T>
+impl<T> KalmanFilterZWithSensors<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<T> KalmanFilterZWithR<T>
+impl<T> KalmanFilterZWithSensors<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
 {
@@ -78,7 +78,7 @@ mod test_traits {
 
     #[test]
     fn normal_types() {
-        is_full::<KalmanFilterZWithRf32>();
-        is_full::<KalmanFilterZWithRf64>();
+        is_full::<KalmanFilterZWithSensorsf32>();
+        is_full::<KalmanFilterZWithSensorsf64>();
     }
 }

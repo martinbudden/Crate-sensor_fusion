@@ -25,10 +25,13 @@ mod madgwick_filter;
 mod mahony_filter;
 
 mod kalman_filter_z;
-mod kalman_filter_z_with_r;
+mod kalman_filter_z_with_sensors;
+
+mod kalman_filter_xy;
+mod kalman_filter_xy_with_sensors;
 
 mod kalman_filter_xyz;
-mod kalman_filter_xyz_with_r;
+mod kalman_filter_xyz_with_sensors;
 
 mod sensor_fusion;
 mod sensor_fusion_math;
@@ -40,14 +43,17 @@ pub use complementary_filter::{ComplementaryFilter, ComplementaryFilterf32, Comp
 pub use madgwick_filter::{MadgwickFilter, MadgwickFilterf32, MadgwickFilterf64};
 pub use mahony_filter::{MahonyFilter, MahonyFilterf32, MahonyFilterf64};
 
-pub use kalman_filter_z::{KalmanFilterZ, KalmanFilterZf32, KalmanFilterZf64};
-pub use kalman_filter_z_with_r::{KalmanFilterZWithR, KalmanFilterZWithRf32, KalmanFilterZWithRf64};
-
-pub use kalman_filter_xyz::{KalmanFilterXYZ, KalmanFilterXYZf32};
-pub use kalman_filter_xyz_with_r::{KalmanFilterXYZWithR, KalmanFilterXYZWithRf32};
-
 pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};
 pub use sensor_fusion_math::SensorFusionMath;
+
+pub use kalman_filter_z::{KalmanFilterZ, KalmanFilterZf32, KalmanFilterZf64};
+pub use kalman_filter_z_with_sensors::{KalmanFilterZWithSensors, KalmanFilterZWithSensorsf32, KalmanFilterZWithSensorsf64};
+
+pub use kalman_filter_xy::{KalmanFilterXY, KalmanFilterXYf32};
+pub use kalman_filter_xy_with_sensors::{KalmanFilterXYWithSensors, KalmanFilterXYWithSensorsf32};
+
+pub use kalman_filter_xyz::{KalmanFilterXYZ, KalmanFilterXYZf32};
+pub use kalman_filter_xyz_with_sensors::{KalmanFilterXYZWithSensors, KalmanFilterXYZWithSensorsf32};
 
 pub use trilaterate_2d::{Anchor2d, Anchor2df32, Anchor2df64, trilaterate_2d};
 pub use trilaterate_3d::{Anchor3d, Anchor3df32, Anchor3df64, trilaterate_3d_weighted};

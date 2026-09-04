@@ -158,7 +158,7 @@ impl KalmanFilterXYZWithR {
 /*
 Multi-Rate Sensor Delay Buffer (often called a Delayed State Buffer or Retrodictive Update)
 
-In a flight controller, IMU updates are typically 400Hz - 8kHz. 
+In a flight controller, IMU updates are typically 400Hz - 8kHz.
 However, your GPS updates are typically at 10Hz.
 
 If we apply a delayed GPS measurement to the much more frequently updated IMU state, will cause errors.

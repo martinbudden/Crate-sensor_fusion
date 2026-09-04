@@ -1,7 +1,7 @@
 use vqm::{Matrix3x3, Matrix3x3f32, Matrix3x3xM3x3, Matrix3x3xM3x3f32, Vector3f32};
 
 /// `f32` variant of `PositionKalmanFilter0`.
-pub type PositionKalmanFilterf32 = KalmanFilterXYZ;
+pub type KalmanFilterXYZf32 = KalmanFilterXYZ;
 
 /*
 Rule of Thumb for Tuning
@@ -15,18 +15,18 @@ you are trusting your noisy sensors too heavily over your smooth physics predict
 Action: Decrease Q or Increase R.
 */
 /// The system is split into two cleanly decoupled steps. This:
-/// 1. avoids managing a massive 15x15 state matrix.
-/// 2. linearizes the attitude so a Kalman Filter (rather than an Extended Kalman Filter) can be used.
+/// 1. reduces the covariance matrix from 15x15 to 9x9.
+/// 2. allows a Linear Kalman Filter (rather than an Extended Kalman Filter) to be used.
 /// ```text
 ///   ┌──────────────┐
-///   │ IMU Acc/Gyro ├──► [ 1. ATTITUDE (MADGWICK) FILTER ] ──► Attitude Quaternion
-///   └──────────────┘                │
-///                                   ▼
-///   ┌───────────┐       [    Transform Body ]
-///   │ IMU Acc   ├─────► [ 2. Acceleration   ] ──► [ 3. POSITION KALMAN FILTER ]
-///   └───────────┘       [    to Earth Frame ]                  ▲
-///                                                              │
-///                        GPS & Barometer Measurements ─────────┘
+///   │ IMU Acc/Gyro ├──► [ MADGWICK FILTER ] ──► Orientation Quaternion
+///   └──────────────┘             │
+///                                │ Acceleration (transformed to Earth Frame)
+///                                │
+///                                ▼
+///                 [ 3D POSITION KALMAN FILTER ] ──► Position and Velocity Vectors
+///                                │
+///   GPS & Barometer  ────────────┘
 /// ```
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -43,7 +43,6 @@ pub struct KalmanFilterXYZ {
     /// **P*: Prediction error covariance (the system's internal uncertainty).
     pub P: Matrix3x3xM3x3f32,
 
-    // --- Hyperparameters & Tuning Constants ---
     // state transition noise covariance Matrix `Q`
     /// Process Noise spectral density mapping to Velocity variance.
     pub Q_velocity: f32,
@@ -101,11 +100,11 @@ impl KalmanFilterXYZ {
             pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
             acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
-            // A value of 0.05 implies that every second, you expect aerodynamic buffeting, vibration, or wind to naturally perturb the velocity
+            // A value of 0.05 implies that every second, we expect aerodynamic buffeting, vibration, or wind to naturally perturb the velocity
             // by roughly 0.22 m/s ie sqrt(0.05).
             Q_velocity: 0.05,
-            //  Sensor bias shifts very slowly due to thermal changes as the silicone heats up.
-            //  So this value should be tiny so the filter treats bias as a near-constant,
+            // Sensor bias shifts very slowly due to thermal changes as the silicon heats up.
+            // So this value should be tiny so the filter treats bias as a near-constant,
             // shifting it incrementally over minutes rather than fluctuating on every single vibration loop.
             Q_bias: 1e-4,
             P,

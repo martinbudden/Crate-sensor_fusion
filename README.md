@@ -4,13 +4,14 @@ This crate contains [sensor fusion](https://en.wikipedia.org/wiki/Sensor_fusion)
 output from a gyroscope, accelerometer, and optionally a magnetometer to give output that has less uncertainty
 than the output of the individual sensors.
 
-Five sensor fusion implementations are available:
+Six sensor fusion implementations are available:
 
 1. Complementary Filter
 2. Mahony Filter
 3. Madgwick Filter
 4. Altitude Kalman Filter
-5. 3D Position Kalman Filter.
+5. 2D Position Kalman Filter.
+6. 3D Position Kalman Filter.
 
 ## Simple example
 
@@ -38,10 +39,16 @@ fn main() {
 }
 ```
 
-## Complementary filter
+## Madgwick Filter
 
-This has been implemented for reference. It is not recommended for general use:
-both the Mahony filter and the Madgwick filter are faster and don't suffer from gimbal lock.
+The Madgwick filter has been refactored to be more computationally efficient (and so faster) than
+the standard version used in many implementations, see [Optimization](#opt) below.
+
+The Madgwick filter also supports three-way fusing of accelerometer, gyroscope, and magnetometer readings:
+
+```text
+let orientation = madgwick.fuse_acc_gyro_mag(acc, gyro_rps, mag, dt);
+```
 
 ## Mahony filter
 
@@ -57,6 +64,11 @@ let orientation = mahony.fuse_acc_gyro(acc, gyro_rps, dt);
 
 The Mahony filter does not support 3-way fusion using a magnetometer.
 
+## Complementary filter
+
+This has been implemented for reference. It is not recommended for general use:
+both the Mahony filter and the Madgwick filter are faster and don't suffer from gimbal lock.
+
 ## Method call interface
 
 The `FuseAccGyro` and `FuseAccGyroMag` traits allow method-call syntax to be used:
@@ -71,18 +83,15 @@ let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick, dt);
 let orientation = (acc, gyro_rps, mag).fuse_acc_gyro_mag_using(&mut madgwick, dt);
 ```
 
-## Madgwick Filter
+## Kalman filter
 
-The Madgwick filter has been refactored to be more computationally efficient (and so faster) than
-the standard version used in many implementations, see [Optimization](#opt) below.
+Three Kalman filters are provided:
 
-The Madgwick filter also supports three-way fusing of accelerometer, gyroscope, and magnetometer readings:
+1. `KalmanFilterZ` - a filter to estimate altitude and vertical speed.
+2. `KalmanFilterXY` - a filter to estimate 2D position and velocity.
+3. `KalmanFilterXYZ` - a filter to estimate 3D position and velocity.
 
-```text
-let orientation = madgwick.fuse_acc_gyro_mag(acc, gyro_rps, mag, dt);
-```
-
-## Position Kalman filter
+## Position Kalman filter internals
 
 A Kalman filter works by predicting an object's state using a physical model of the object. So, for example,
 to predict an object's position velocity it uses the measured acceleration and the kinematic equations
@@ -111,7 +120,7 @@ rather than an EKF.
 But we are still not out of the woods: multiplying two 9x9 matrices requires 729 individual arithmetic operations.
 And the Kalman filter predict and correct steps each require several matrix operations.
 
-At this point we have two choices.
+TODO: further explanation of Kalman filter internals in readme.
 
 ## SIMD support
 
@@ -129,7 +138,7 @@ This can be invoked using `rustup`, eg:
 rustup run nightly cargo build --features simd --target thumbv8m.main-none-eabi
 ```
 
-## Optimization {#opt}
+## Madgwick Filter Optimization {#opt}
 
 Classically, the calculation of the Madgwick gradient descent corrective step involves multiplication of a vector by a matrix,
 this involves a total of 54 arithmetic operations for the acc/gyro case.
@@ -148,19 +157,20 @@ The aim is to be able to run sensor fusion a part of a Gyro/PID loop running at 
 (including reading the IMU, filtering the output, performing sensor fusion and calculation the motor outputs
 using a PID controller) needs to run in 125 microseconds. This is currently looking achievable.
 
-```text
+```rust
 // Classic version
 //
 // total:
 //      54 arithmetic operations (35 multiplications, 19 additions/subtractions)
 //
-fn madgwick_step(q: Quaternionf32, a: Vector3f32) -> Quaternionf32 {
-    let M = Matrix4x4f32::new( // 10 multiplications
+# use vqm::{Quaternionf32, Vector3f32, Vector4f32, Matrix4x4f32};
+fn madgwick_step(q: Quaternionf32, a: Vector3f32) -> Vector4f32 {
+    let M = Matrix4x4f32::new([ // 10 multiplications
         -2.0*q.x, 2.0*q.w,      0.0, 0.0,
          2.0*q.y, 2.0*q.z, -4.0*q.w, 0.0,
         -2.0*q.z, 2.0*q.y, -4.0*q.x, 0.0,
          2.0*q.w, 2.0*q.x,      0.0, 0.0
-    );
+    ]);
 
     let v = Vector4f32::new( // 9 multiplications, 7 additions/subtractions
         2.0*(      q.w*q.y - q.z*q.x) - a.x,

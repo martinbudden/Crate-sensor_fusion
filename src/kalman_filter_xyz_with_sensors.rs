@@ -1,4 +1,4 @@
-use vqm::{Matrix3x3f32, Vector3f32};
+use vqm::{Matrix3x3f32, Vector2f32, Vector3f32};
 
 use super::KalmanFilterXYZ;
 
@@ -28,7 +28,7 @@ pub struct KalmanFilterXYZWithSensors {
     /// Absolute Measurement Noise variance for rangefinder.
     pub R_rangefinder: f32,
     /// Absolute Measurement Noise variance for optical flow.
-    pub R_optical_flow: Vector3f32,
+    pub R_optical_flow: Vector2f32,
     /// Delayed State Buffer for Retrodictive Updates.
     pub history: [Snapshot; Self::SNAPSHOT_SIZE], // Fixed circular window (e.g., handles up to 640ms of latency at 100Hz)
     pub head_idx: usize, // Current write pointer in our ring buffer
@@ -72,7 +72,7 @@ impl KalmanFilterXYZWithSensors {
             // which corresponds to a variance of 0.01 to 0.04 m². However, the actual noise can vary based on environmental conditions and sensor quality.
             R_barometer: 0.03,
             R_rangefinder: 0.03,
-            R_optical_flow: Vector3f32 { x: 0.04, y: 0.04, z: 0.04 },
+            R_optical_flow: Vector2f32 { x: 0.04, y: 0.04 },
             history: [Snapshot::default(); Self::SNAPSHOT_SIZE],
             head_idx: 0,
             system_time: 0.0,
@@ -139,8 +139,8 @@ impl KalmanFilterXYZWithSensors {
     }
 
     /// Phase 2: Correct position using optical flow position measurement.
-    pub fn correct_position_using_optical_flow(&mut self, position: Vector3f32) {
-        self.base.correct_position(position, self.R_optical_flow);
+    pub fn correct_position_using_optical_flow(&mut self, position: Vector2f32) {
+        self.base.correct_position_xy(position, self.R_optical_flow);
     }
 
     // Inside the main IMU execution loop (eg gyro_pid loop).

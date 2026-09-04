@@ -1,4 +1,4 @@
-use vqm::{Matrix3x3, Matrix3x3f32, Matrix3x3xM3x3, Matrix3x3xM3x3f32, Vector3f32};
+use vqm::{Matrix3x3, Matrix3x3f32, Matrix3x3xM3x3, Matrix3x3xM3x3f32, Vector2f32, Vector3f32};
 
 /// `f32` variant of `PositionKalmanFilter0`.
 pub type KalmanFilterXYZf32 = KalmanFilterXYZ;
@@ -378,7 +378,7 @@ impl KalmanFilterXYZ {
     /// * position: Vector3f32 observation `[x, y, z]`
     /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
     #[allow(non_snake_case)]
-    pub fn correct_position_delayed(&mut self, position: Vector3f32, R: Vector3f32, past_pos: Vector3f32) {
+    pub fn correct_position_delayed(&mut self, position: Vector3f32, past_pos: Vector3f32, R: Vector3f32) {
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
@@ -430,17 +430,12 @@ impl KalmanFilterXYZ {
         self.P.enforce_symmetry();
     }
 
-    #[allow(non_snake_case)]
-    pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
-        self.correct_position_delayed(position, R, self.pos);
-    }
-
     /// Joseph's Stabilized Form for the covariance update step:
     /// P{k} = (I - KH)* P_{k-1} *(I - KH)^T + KRK^T).
     /// While computationally more expensive, it guarantees the result remains positive-definite.
     /// That it ensures the covariance matrix has positive  eigenvalues and remains valid and invertible for future updates.
     #[allow(non_snake_case)]
-    pub fn correct_position_joseph(&mut self, position: Vector3f32, R: Vector3f32) {
+    pub fn correct_position_delayed_joseph(&mut self, position: Vector3f32, past_pos: Vector3f32, R: Vector3f32) {
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
@@ -456,7 +451,7 @@ impl KalmanFilterXYZ {
         let K_acc_bias = self.P[Self::BP] * S_inv;
 
         // State Update
-        let error = position - self.pos;
+        let error = position - past_pos;
         self.pos += K_pos * error;
         self.vel += K_vel * error;
         self.acc_bias += K_acc_bias * error;
@@ -512,6 +507,31 @@ impl KalmanFilterXYZ {
         // Ensure numerical stability by enforcing symmetry on the covariance matrix.
         self.P.enforce_symmetry();
     }
+
+    #[allow(non_snake_case)]
+    pub fn correct_position_xy_delayed(&mut self, position: Vector2f32, past_pos: Vector3f32, R: Vector2f32) {
+        // TODO: implement correct_position_xy_delayed.
+        _ = self;
+        _ = position;
+        _ = R;
+        _ = past_pos;
+    }
+
+    #[allow(non_snake_case)]
+    pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
+        self.correct_position_delayed(position, self.pos, R);
+    }
+
+    #[allow(non_snake_case)]
+    pub fn correct_position_joseph(&mut self, position: Vector3f32, R: Vector3f32) {
+        self.correct_position_delayed_joseph(position, self.pos, R);
+    }
+
+    #[allow(non_snake_case)]
+    pub fn correct_position_xy(&mut self, position: Vector2f32, R: Vector2f32) {
+        self.correct_position_xy_delayed(position, self.pos, R);
+    }
+
 }
 
 // **** Validate ***

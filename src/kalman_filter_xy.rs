@@ -169,7 +169,7 @@ impl KalmanFilterXY {
 
 impl KalmanFilterXY {
     #[allow(non_snake_case)]
-    pub fn correct_position_delayed(&mut self, position: Vector2f32, R: Vector2f32, past_pos: Vector2f32) {
+    pub fn correct_position_delayed(&mut self, position: Vector2f32, past_pos: Vector2f32, R: Vector2f32) {
         // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
@@ -223,7 +223,7 @@ impl KalmanFilterXY {
 
     #[allow(non_snake_case)]
     pub fn correct_position(&mut self, position: Vector2f32, R: Vector2f32) {
-        self.correct_position_delayed(position, R, self.pos);
+        self.correct_position_delayed(position, self.pos, R);
     }
 
     /// Joseph's Stabilized Form for the covariance update step:

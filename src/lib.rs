@@ -47,7 +47,9 @@ pub use sensor_fusion::{FuseAccGyro, FuseAccGyroMag, SensorFusion};
 pub use sensor_fusion_math::SensorFusionMath;
 
 pub use kalman_filter_z::{KalmanFilterZ, KalmanFilterZf32, KalmanFilterZf64};
-pub use kalman_filter_z_with_sensors::{KalmanFilterZWithSensors, KalmanFilterZWithSensorsf32, KalmanFilterZWithSensorsf64};
+pub use kalman_filter_z_with_sensors::{
+    KalmanFilterZWithSensors, KalmanFilterZWithSensorsf32, KalmanFilterZWithSensorsf64,
+};
 
 pub use kalman_filter_xy::{KalmanFilterXY, KalmanFilterXYf32};
 pub use kalman_filter_xy_with_sensors::{KalmanFilterXYWithSensors, KalmanFilterXYWithSensorsf32};

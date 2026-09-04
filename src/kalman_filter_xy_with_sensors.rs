@@ -137,7 +137,7 @@ impl KalmanFilterXYWithSensors {
 Multi-Rate Sensor Delay Buffer (often called a Delayed State Buffer or Retrodictive Update)
 
 In a flight controller, IMU updates are typically 400Hz - 8kHz.
-However, your GPS updates are typically at 10Hz.
+However GPS updates are typically at 10Hz.
 
 If we apply a delayed GPS measurement to the much more frequently updated IMU state, will cause errors.
 
@@ -152,41 +152,26 @@ Past GPS Step Matched] ──► Apply GPS Correction ──► Fast-Forward Pre
 The steps are:
 
 * Find the match: Look backward through the history buffer to find the snapshot whose time_stamp matches the arrival of the delayed measurement.
-* Rewind: Overwrite the active states (self.pos, self.vel, self.P, etc.) with the contents of that historical snapshot.
+* Rewind: Overwrite the active states (self.pos, self.vel, self.P, etc) with the contents of that historical snapshot.
 * Correct: Run the `correct_position` code on these reloaded past states using the new sensor data.
 * Fast-Forward: Loop forward through the rest of the buffer from that past index back up to the present head index,
   re-running predict_state and predict_covariance for every intermediate step.
 
 
-Critical Edge Cases to check
+Critical Edge Cases to check:
 
 Buffer Overflow:
 
-If your IMU loops at 400Hz and a sensor has a 200ms lag, your history buffer must be at least 0.200 / (1/400) = 80 slots deep.
+If the IMU loops at 400Hz and a sensor has a 200ms lag, then the history buffer must be at least 0.200 / (1/400) = 80 slots deep.
 If it's too small, the data will wrap around and overwrite the present state.
-Always size your buffer array with an extra 20% breathing room.
+Size the buffer array with an extra 20% breathing room.
 
-Correction Cascades: If you receive a Barometer update and a GPS update at the same past timestamp,
-you must execute both updates back-to-back inside the same rewind event before fast-forwarding.
+Correction Cascades:
+If we receive a Barometer update and a GPS update at the same past timestamp, then
+we must execute both updates back-to-back inside the same rewind event before fast-forwarding.
 */
 #[allow(non_snake_case)]
 impl KalmanFilterXYWithSensors {
-    /*
-    Strategy 1: The "State-Only Rewind"
-
-    In a Kalman filter, the Kalman Gain `K` scales down over time as the filter collects measurements.
-    Because K changes very slowly, you can make a highly accurate engineering trade-off:
-    Assume the covariance matrix at the current time is close enough to use for a measurement that happened 100ms ago.
-
-    Using this approach:You do not rewind `P`.When a delayed GPS measurement arrives, you calculate the innovation error using the past state vector (pos).
-    You calculate the Kalman Gain vectors using your current active P matrix.
-    You correct your current state vector directly.
-
-    By adopting this strategy, you remove `P` and `acc_raw` from the snapshot entirely.
-    The history snapshot drops from 90 floats down to just 10 floats.
-    You no longer need a while loop to fast-forward predictions.
-    The delayed update becomes an instantaneous operation executed at the present time step:
-    */
     pub fn correct_position_delayed_optimized(
         &mut self,
         position: Vector2f32,
@@ -244,12 +229,11 @@ impl KalmanFilterXYWithSensors {
         sensor_time: f32,
         dt: f32,
     ) {
-        // 1. Fetch the exact past matched element via your validated method
         let Some((past, start_idx)) = self.find_snapshot(sensor_time, dt) else {
             return; // Discard safely if too old or out-of-bounds
         };
 
-        // 2. REWIND: Restore the past kinematic state variables
+        // REWIND: Restore the past kinematic state variables
         self.base.pos = past.pos;
         self.base.vel = past.vel;
         self.base.acc_bias = past.acc_bias;
@@ -261,7 +245,7 @@ impl KalmanFilterXYWithSensors {
         self.base.P[Self::VV] = past.VV;
         // Bias blocks (PB, VB, BB, BP, BV) remain untouched at their current present values
 
-        // 3. CORRECT: Run your optimized 3D position correction in the past
+        // CORRECT: Run `correct_position` in the past
         self.base.correct_position(position, R_gps);
 
         // Fast-Forward back to the present, preserving all historical events
@@ -409,7 +393,7 @@ mod test_traits {
 
 #[cfg(test)]
 mod tests_delayed {
-    use super::*; // Pulls in PositionKalmanFilter, Vector3f32, Snapshot, etc.
+    use super::*;
 
     /// A simple struct to model a delayed hardware communication packet.
     struct GpsPacket {
@@ -418,8 +402,7 @@ mod tests_delayed {
     }
 
     #[test]
-    fn test_hybrid_delayed_position_tracking() {
-        // Initialize our filter with standard parameters
+    fn test_delayed_position_tracking() {
         let mut filter = KalmanFilterXYWithSensors::new();
 
         let dt = 0.01; // 100Hz internal state update loop
@@ -434,7 +417,7 @@ mod tests_delayed {
         let mut gps_latency_queue: Vec<GpsPacket> = Vec::new();
         let gps_delay_seconds = 0.15; // 150ms transmission lag
 
-        // Let's run a 4-second flight test under severe lateral acceleration
+        // Run a 4-second flight test under severe lateral acceleration
         let total_simulation_seconds = 4.0;
         #[allow(clippy::cast_possible_truncation)]
         let total_loops = (total_simulation_seconds / dt) as i32;
@@ -459,11 +442,6 @@ mod tests_delayed {
             let acc_measurement = true_acc_kinematic + true_bias;
 
             // Step A: Fast 100Hz State and Covariance Updates
-            /*filter.predict_state(acc_measurement, dt);
-            filter.predict_covariance(dt);
-
-            // Push our active state parameters into our hybrid history cache
-            filter.push_snapshot(acc_measurement, dt);*/
             filter.handle_imu_tick(acc_measurement, dt);
 
             // Step B: Asynchronous GPS Sampling (Runs at 10Hz)
@@ -574,10 +552,6 @@ mod tests_downsampled {
                 && current_sim_time >= (front_packet.time_stamp + gps_delay_seconds)
             {
                 let packet = gps_latency_queue.remove(0);
-
-                // Execute hybrid correction on downsampled blocks.
-                // Note: We pass (dt * 2.0) as the replay time-increment step size
-                // because our stored snapshot spacing is doubled!
                 filter.correct_position_delayed_with_fast_forward(packet.position, r_gps, packet.time_stamp, dt);
             }
 

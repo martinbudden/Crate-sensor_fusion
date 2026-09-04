@@ -1,8 +1,9 @@
 use vqm::{Matrix2x2f32, Matrix3x3xM2x2, Matrix3x3xM2x2f32, Vector2f32};
 
-/// `f32` variant of `PositionKalmanFilter0`.
+/// `f32` variant of `PositionKalmanFilterXY`.
 pub type KalmanFilterXYf32 = KalmanFilterXY;
 
+/// Linear Kalman Filter in 2 dimensions.
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct KalmanFilterXY {
@@ -14,8 +15,8 @@ pub struct KalmanFilterXY {
     /// Accelerometer Bias (x, y).
     pub acc_bias: Vector2f32,
 
-    /// Predicted System Uncertainty Covariance Matrix (P).
-    /// **P*: Prediction error covariance (the system's internal uncertainty).
+    // Predicted System Uncertainty Covariance Matrix (P).
+    /// `P`: Prediction error covariance (aka state covariance matrix, the system's internal uncertainty).
     pub P: Matrix3x3xM2x2f32,
 
     // state transition noise covariance Matrix `Q`
@@ -126,6 +127,13 @@ impl KalmanFilterXY {
         // So `self.acc_bias` not updated.
     }
 
+    /// Predict covariance:
+    ///
+    /// P = F * P * F^T + Q.
+    ///
+    /// P: State covariance matrix
+    /// F: State transition matrix
+    /// Q: Process noise covariance.
     #[allow(non_snake_case)]
     pub fn predict_covariance(&mut self, dt: f32) {
         // Capture the current a posteriori state (P_k₋₁).
@@ -167,10 +175,18 @@ impl KalmanFilterXY {
 
 // **** Correct ***
 
+#[allow(non_snake_case)]
 impl KalmanFilterXY {
-    #[allow(non_snake_case)]
+    /// Covariance correction step.
+    ///
+    /// `S = H * P * H^T + R`
+    /// `K = P * H^T * S^-1`
+    /// `P = (I - K * H) * P`.
+    ///
+    /// R is measurement noise covariance.
     pub fn correct_position_delayed(&mut self, position: Vector2f32, past_pos: Vector2f32, R: Vector2f32) {
-        // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
+        // Calculate the 3x3 Innovation Covariance matrix.
+        // S = H * P * H^T + R
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
         // The the innovation matrix may be non-invertible.
@@ -179,7 +195,10 @@ impl KalmanFilterXY {
             return;
         };
 
-        // Calculate the 3x3 segmented Kalman Gain pieces (K = P * H^T * S_inv)
+        // Calculate the 3x3 segmented Kalman Gain pieces
+        //
+        // `K = P * H^T * S_inv`
+        //
         // H selects the position column block stack (Column 0: PP, VP, BP)
         // H selects the position states, so P * H^T is simply the first three columns of P,
         // represented by the first three Matrix3x3 blocks.
@@ -200,19 +219,20 @@ impl KalmanFilterXY {
         let HP_pv = self.P[Self::PV];
         let HP_pb = self.P[Self::PB];
 
-        // Calculate P = P - K * (H * P) by subtracting the K * (H * P) submatrices block by block.
+        // Calculate P -= K * (H * P), ie P = (I - K * H) * P
+        // by subtracting the K * (H * P) submatrices one by one.
 
-        // Column 0: Position Column Blocks
+        // Column 0: position column submatrices
         self.P[Self::PP] -= K_pos * HP_pp;
         self.P[Self::VP] -= K_vel * HP_pp;
         self.P[Self::BP] -= K_acc_bias * HP_pp;
 
-        // Column 1: Velocity Column Blocks
+        // Column 1: velocity Column submatrices
         self.P[Self::PV] -= K_pos * HP_pv;
         self.P[Self::VV] -= K_vel * HP_pv;
         self.P[Self::BV] -= K_acc_bias * HP_pv;
 
-        // Column 2: Bias Column Blocks
+        // Column 2: bias column submatrices
         self.P[Self::PB] -= K_pos * HP_pb;
         self.P[Self::VB] -= K_vel * HP_pb;
         self.P[Self::BB] -= K_acc_bias * HP_pb;
@@ -221,18 +241,15 @@ impl KalmanFilterXY {
         self.P.enforce_symmetry();
     }
 
-    #[allow(non_snake_case)]
-    pub fn correct_position(&mut self, position: Vector2f32, R: Vector2f32) {
-        self.correct_position_delayed(position, self.pos, R);
-    }
-
     /// Joseph's Stabilized Form for the covariance update step:
-    /// P{k} = (I - KH)* P_{k-1} *(I - KH)^T + KRK^T).
+    ///
+    /// P{k} = (I - KH) * P{k-1} * (I - KH)^T + KRK^T).
+    ///
     /// While computationally more expensive, it guarantees the result remains positive-definite.
-    /// That is, it ensures the covariance matrix has positive eigenvalues and remains valid and invertible for future updates.
-    #[allow(non_snake_case)]
-    pub fn correct_position_joseph(&mut self, position: Vector2f32, R: Vector2f32) {
-        // Calculate the 3x3 Innovation Covariance matrix: S = H * P * H^T + R
+    /// That is it ensures the covariance matrix has positive eigenvalues and remains valid and invertible for future updates.
+    pub fn correct_position_delayed_joseph(&mut self, position: Vector2f32, past_pos: Vector2f32, R: Vector2f32) {
+        // Calculate the 2x2 Innovation Covariance matrix:
+        // S = H * P * H^T + R
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
         // The the innovation matrix may be non-invertible.
@@ -247,7 +264,7 @@ impl KalmanFilterXY {
         let K_acc_bias = self.P[Self::BP] * S_inv;
 
         // State Update
-        let error = position - self.pos;
+        let error = position - past_pos;
         self.pos += K_pos * error;
         self.vel += K_vel * error;
         self.acc_bias += K_acc_bias * error;
@@ -303,6 +320,14 @@ impl KalmanFilterXY {
         // Ensure numerical stability by enforcing symmetry on the covariance matrix.
         self.P.enforce_symmetry();
     }
+
+    pub fn correct_position(&mut self, position: Vector2f32, R: Vector2f32) {
+        self.correct_position_delayed(position, self.pos, R);
+    }
+
+    pub fn correct_position_joseph(&mut self, position: Vector2f32, R: Vector2f32) {
+        self.correct_position_delayed_joseph(position, self.pos, R);
+    }
 }
 
 #[cfg(test)]
@@ -319,12 +344,11 @@ mod test_traits {
 }
 
 #[cfg(test)]
-mod tests_position {
-    use super::*; // Pulls in PositionKalmanFilter, Vector3f32, and Matrix3x3xM3x3f32
+mod tests {
+    use super::*;
 
     #[test]
-    fn test_2d_position_convergence_and_maneuver() {
-        // Initialize the filter with your tuned parameter states
+    fn test_2d_position_convergence() {
         let mut filter = KalmanFilterXY::new();
 
         // Capture initial uncertainty variance values from the main diagonal blocks
@@ -335,7 +359,7 @@ mod tests_position {
         let dt = 0.01; // 100 Hz tracking thread loop
 
         // Define realistic GPS/UWB measurement noise variances (R)
-        // Tracks ±1.5m horizontal variance and ±3.0m vertical variance
+        // Tracks ±1.5m horizontal variance
         let r_gps = Vector2f32 { x: 2.25, y: 2.25 };
 
         // Define the ground-truth physical state parameters
@@ -366,8 +390,8 @@ mod tests_position {
         println!("Stationary -> True Bias X: {:.4}, Estimated Bias X: {:.4}", true_bias.x, filter.acc_bias.x);
 
         // Verification assertions for Phase 1
-        assert!((filter.pos.x - true_pos.x).abs() < 0.05, "Position drifted while stationary!");
-        assert!((filter.vel.x - true_vel.x).abs() < 0.05, "Velocity accumulated noise while stationary!");
+        assert!((filter.pos().x - true_pos.x).abs() < 0.05, "Position drifted while stationary!");
+        assert!((filter.vel().x - true_vel.x).abs() < 0.05, "Velocity accumulated noise while stationary!");
 
         // Ensure covariance has shrunk significantly below the starting bounds
         let post_stat_p_pos_x = filter.P[KalmanFilterXY::PP][KalmanFilterXY::M11];
@@ -400,10 +424,10 @@ mod tests_position {
         println!("Maneuver -> True Final Vel Y: {:.4}, Estimated Final Vel Y: {:.4}", true_vel.y, filter.vel.y);
 
         // Tracking precision assertions
-        assert!((filter.pos.x - true_pos.x).abs() < 0.1, "Filter missed true physical X position track!");
-        assert!((filter.pos.y - true_pos.y).abs() < 0.1, "Filter missed true physical Y position track!");
-        assert!((filter.vel.x - true_vel.x).abs() < 0.1, "Filter velocity tracking tracking failed on X axis!");
-        assert!((filter.vel.y - true_vel.y).abs() < 0.1, "Filter velocity tracking tracking failed on Y axis!");
+        assert!((filter.pos().x - true_pos.x).abs() < 0.1, "Filter missed true physical X position track!");
+        assert!((filter.pos().y - true_pos.y).abs() < 0.1, "Filter missed true physical Y position track!");
+        assert!((filter.vel().x - true_vel.x).abs() < 0.1, "Filter velocity tracking tracking failed on X axis!");
+        assert!((filter.vel().y - true_vel.y).abs() < 0.1, "Filter velocity tracking tracking failed on Y axis!");
 
         println!("\n✅ 2D position state propagation and measurement updates verified successfully!");
     }

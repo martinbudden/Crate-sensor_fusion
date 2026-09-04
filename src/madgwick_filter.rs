@@ -161,7 +161,7 @@ where
         // This represents a flat orientation pointing in the direction of travel.
         let mut target = Quaternion::<T>::from_yaw_radians(yaw_radians);
 
-        // The dot product between your two quaternions tells you how well aligned they are.
+        // The dot product between two quaternions tells you how well aligned they are.
         // If the dot product is positive, the two quaternions are on the same hemisphere, and moving directly toward the target is the shortest path.
         // If the dot product is negative, the quaternions are pointing the same way geometrically,
         // but traveling along the raw path would take the "long way around" the 4D sphere

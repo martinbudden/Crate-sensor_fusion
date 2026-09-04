@@ -15,27 +15,35 @@ pub struct KalmanFilterZWithSensors<T> {
     r_barometer: T,
     /// Rangefinder measurement variance.
     r_rangefinder: T,
-    /// GPS measurement variance.
+    /// GPS vertical measurement variance.
     r_gps: T,
 }
 
-impl<T> Default for KalmanFilterZWithSensors<T>
-where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
-{
+impl Default for KalmanFilterZWithSensorsf32 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> KalmanFilterZWithSensors<T>
-where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
-{
+impl Default for KalmanFilterZWithSensorsf64 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KalmanFilterZWithSensorsf32 {
     /// Constructor.
     #[must_use]
     pub const fn new() -> Self {
-        Self { base: KalmanFilterZ::new(), r_barometer: T::ZERO, r_rangefinder: T::ZERO, r_gps: T::ZERO }
+        Self { base: KalmanFilterZ::new(), r_barometer: 0.03, r_rangefinder: 0.03, r_gps: 9.0 }
+    }
+}
+
+impl KalmanFilterZWithSensorsf64 {
+    /// Constructor.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { base: KalmanFilterZ::new(), r_barometer: 0.03, r_rangefinder: 0.03, r_gps: 9.0 }
     }
 }
 

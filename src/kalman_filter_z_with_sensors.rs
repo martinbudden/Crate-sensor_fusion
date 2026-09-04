@@ -1,5 +1,5 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::{MathMethods, Matrix3x3Math, Vector3};
+use vqm::{MathMethods, Matrix3x3Math};
 
 use super::{KalmanFilterZ, kalman_filter_z::KalmanFilterZConstants};
 
@@ -51,7 +51,7 @@ impl<T> KalmanFilterZWithSensors<T>
 where
     T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
-    pub fn predict(&mut self, acceleration_measurement: T, delta_t: T) -> Vector3<T> {
+    pub fn predict(&mut self, acceleration_measurement: T, delta_t: T) -> [T; 3] {
         self.base.predict(acceleration_measurement, delta_t)
     }
 }

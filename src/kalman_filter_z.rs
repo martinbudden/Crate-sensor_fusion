@@ -27,8 +27,8 @@ impl KalmanFilterZConstants for f64 {
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct KalmanFilterZ<T> {
-    predicted: Vector3<T>,
-    estimated: Vector3<T>,
+    predicted: [T; 3],
+    estimated: [T; 3],
     bias: T,
     /// Predicted System Uncertainty Covariance Matrix (P).
     P: Matrix3x3<T>,
@@ -53,11 +53,12 @@ where
     /// Q, process noise covariance matrix.
     const Q1: T = T::ONE_HUNDREDTH;
     const Q3: T = T::ONE;
-
+}
+impl<T> KalmanFilterZ<T> {
     /// indices to access matrix rows.
-    const _VELOCITY_ROW: usize = 0;
-    const ALTITUDE_ROW: usize = 1;
-    const _BIAS_ROW: usize = 2;
+    const VELOCITY: usize = 0;
+    const ALTITUDE: usize = 1;
+    const BIAS: usize = 2;
 }
 
 impl<T> KalmanFilterZ<T>
@@ -68,8 +69,8 @@ where
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            predicted: Vector3::ZERO,
-            estimated: Vector3::ZERO,
+            predicted: [T::ZERO; 3],
+            estimated: [T::ZERO; 3],
             bias: T::ZERO,
             Q_velocity: Self::Q1,
             Q_bias: Self::Q3,
@@ -100,8 +101,8 @@ where
         ]);
 
         Self {
-            estimated: Vector3 { x: T::ZERO, y: initial_altitude, z: T::ZERO },
-            predicted: Vector3 { x: T::ZERO, y: initial_altitude, z: T::ZERO },
+            estimated: [T::ZERO, initial_altitude, T::ZERO],
+            predicted: [T::ZERO, initial_altitude, T::ZERO],
             P: initial_covariance,
             bias: T::ONE_TENTH, // Damping factor configuration baseline
             Q_velocity,
@@ -110,7 +111,7 @@ where
     }
 
     pub fn set_velocity(&mut self, velocity: T) {
-        self.estimated.x = velocity;
+        self.estimated[0] = velocity;
     }
 
     pub fn reset(&mut self) {
@@ -119,7 +120,7 @@ where
 
     /// Returns doublet `(estimated velocity, estimated altitude)`.
     pub fn state(&self) -> (T, T) {
-        (self.estimated.x, self.estimated.y)
+        (self.estimated[0], self.estimated[1])
     }
 }
 
@@ -132,17 +133,17 @@ where
 {
     /// Phase 1: Predict state forward using IMU/Physics
     /// Call this at the IMU frequency or fixed control loop rate.
-    pub fn predict(&mut self, acceleration_measurement: T, dt: T) -> Vector3<T> {
+    pub fn predict(&mut self, acc: T, dt: T) -> [T; 3] {
         // States are a 3d vector with components: velocity, altitude, and bias.
         // Destructure the state vectors as references with meaningful names, for code legibility (Zero cost abstraction).
-        let Vector3 { x: estimated_velocity, y: estimated_altitude, z: estimated_bias } = self.estimated;
-        let Vector3 { x: ref mut predicted_velocity, y: ref mut predicted_altitude, z: ref mut predicted_bias } =
-            self.predicted;
+        //let Vector3 { x: estimated_velocity, y: estimated_altitude, z: estimated_bias } = self.estimated;
+        //let Vector3 { x: ref mut predicted_velocity, y: ref mut predicted_altitude, z: ref mut predicted_bias } =
+        //  self.predicted;
 
         // Kinematic Euler integration for velocity and altitude.
-        *predicted_velocity = estimated_velocity + (acceleration_measurement - estimated_bias) * dt;
-        *predicted_altitude = estimated_altitude + estimated_velocity * dt;
-        *predicted_bias = estimated_bias + estimated_bias * (self.bias * dt);
+        self.predicted[Self::VELOCITY] = self.estimated[Self::VELOCITY] + (acc - self.estimated[Self::BIAS]) * dt;
+        self.predicted[Self::ALTITUDE] = self.estimated[Self::ALTITUDE] + self.estimated[Self::VELOCITY] * dt;
+        self.predicted[Self::BIAS] = self.estimated[Self::BIAS] + self.estimated[Self::BIAS] * (self.bias * dt);
 
         // State Transition Matrix (A)
         #[rustfmt::skip]
@@ -189,13 +190,15 @@ where
         let K = (self.P * H_transpose) * (T::ONE / S);
 
         // Update state estimate
-        let predicted_altitude = self.predicted.y;
+        let error = altitude - self.predicted[Self::ALTITUDE];
+        let K_error = <[T; 3]>::from(K * error);
 
-        let error = altitude - predicted_altitude;
-        self.estimated = self.predicted + K * error;
+        self.estimated[Self::VELOCITY] = self.predicted[Self::VELOCITY] + K_error[Self::VELOCITY];
+        self.estimated[Self::ALTITUDE] = self.predicted[Self::ALTITUDE] + K_error[Self::ALTITUDE];
+        self.estimated[Self::BIAS] = self.predicted[Self::BIAS] + K_error[Self::BIAS];
 
-        // Update error covariance: P = (I - KH)P
-        self.P -= K.outer_product(self.P.row(Self::ALTITUDE_ROW));
+        // Update error covariance: P = (I - KH)P, ie P -= (KH)P
+        self.P -= K.outer_product(self.P.row(Self::ALTITUDE));
 
         // Prepare for next cycle if multiple corrections happen sequentially
         self.predicted = self.estimated;
@@ -238,7 +241,7 @@ mod tests {
         ]);
 
         // Extract altitude row from the P matrix
-        let altitude_row = P.row(KalmanFilterZf32::ALTITUDE_ROW);
+        let altitude_row = P.row(KalmanFilterZf32::ALTITUDE);
         assert_eq!(Vector3f32 { x: 2.0, y: 5.0, z: 11.0 }, altitude_row);
 
         // Calculate the updated Covariance Matrix P_new.

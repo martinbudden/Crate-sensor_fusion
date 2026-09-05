@@ -1,28 +1,10 @@
 use num_traits::{ConstOne, ConstZero, float::FloatCore};
-use vqm::{MathMethods, Matrix3x3, Matrix3x3Math, Vector3};
+use vqm::{MathMethods, Matrix3x3, Matrix3x3Math, Matrix3x3f32, Matrix3x3f64, Vector3};
 
 /// `f32` variant of `AltitudeKalmanFilter`.
 pub type KalmanFilterZf32 = KalmanFilterZ<f32>;
 /// `f64` variant of `AltitudeKalmanFilter`.
 pub type KalmanFilterZf64 = KalmanFilterZ<f64>;
-
-pub trait KalmanFilterZConstants {
-    const ONE_HUNDRED: Self;
-    const ONE_TENTH: Self;
-    const ONE_HUNDREDTH: Self;
-}
-
-impl KalmanFilterZConstants for f32 {
-    const ONE_HUNDRED: Self = 100.0;
-    const ONE_TENTH: Self = 0.1;
-    const ONE_HUNDREDTH: Self = 0.01;
-}
-
-impl KalmanFilterZConstants for f64 {
-    const ONE_HUNDRED: Self = 100.0;
-    const ONE_TENTH: Self = 0.1;
-    const ONE_HUNDREDTH: Self = 0.01;
-}
 
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,53 +19,83 @@ pub struct KalmanFilterZ<T> {
     Q_bias: T,
 }
 
-impl<T> Default for KalmanFilterZ<T>
-where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
+impl Default for KalmanFilterZf32
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> KalmanFilterZ<T>
-where
-    T: Copy + ConstOne + KalmanFilterZConstants,
+impl Default for KalmanFilterZf64
 {
-    /// Q, process noise covariance matrix.
-    const Q1: T = T::ONE_HUNDREDTH;
-    const Q3: T = T::ONE;
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T> KalmanFilterZ<T> {
-    /// indices to access matrix rows.
-    pub const VELOCITY: usize = 0;
-    pub const ALTITUDE: usize = 1;
-    pub const BIAS: usize = 2;
+    /// indices to access matrix.
+    const VELOCITY: usize = 0;
+    const ALTITUDE: usize = 1;
+    const BIAS: usize = 2;
 }
 
-impl<T> KalmanFilterZ<T>
-where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
+impl KalmanFilterZf32
 {
     /// Constructor.
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            predicted: [T::ZERO; 3],
-            estimated: [T::ZERO; 3],
-            bias: T::ZERO,
-            Q_velocity: Self::Q1,
-            Q_bias: Self::Q3,
-            P: Matrix3x3::ZERO,
+            predicted: [0.0; 3],
+            estimated: [0.0; 3],
+            bias: 0.0,
+            Q_velocity: 0.01,
+            Q_bias: 100.0,
+            P: Matrix3x3f32::ZERO,
         }
+    }
+}
+
+impl KalmanFilterZf64
+{
+    /// Constructor.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            predicted: [0.0; 3],
+            estimated: [0.0; 3],
+            bias: 0.0,
+            Q_velocity: 0.01,
+            Q_bias: 100.0,
+            P: Matrix3x3f64::ZERO,
+        }
+    }
+}
+
+impl<T:Copy> KalmanFilterZ<T> {
+    #[inline]
+    #[must_use]
+    pub fn pos(&self) -> T {
+        self.estimated[Self::ALTITUDE]
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn vel(&self) -> T {
+        self.estimated[Self::VELOCITY]
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn acc_bias(&self) -> T {
+        self.estimated[Self::BIAS]
     }
 }
 
 #[allow(non_snake_case)]
 impl<T> KalmanFilterZ<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math + KalmanFilterZConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + MathMethods + Matrix3x3Math,
 {
     /// Initializer targeting steady-state baseline parameters.
     pub fn new_steady_state(initial_altitude: T, Q_velocity: T, Q_bias: T, r_barometer: T) -> Self {
@@ -105,7 +117,7 @@ where
             estimated: [T::ZERO, initial_altitude, T::ZERO],
             predicted: [T::ZERO, initial_altitude, T::ZERO],
             P: initial_covariance,
-            bias: T::ONE_TENTH, // Damping factor configuration baseline
+            bias: T::ONE, // Damping factor configuration baseline
             Q_velocity,
             Q_bias,
         }
@@ -115,14 +127,7 @@ where
         self.estimated[0] = velocity;
     }
 
-    pub fn reset(&mut self) {
-        self.P = Matrix3x3::ONE * T::ONE_HUNDRED;
-    }
-
-    /// Returns doublet `(estimated velocity, estimated altitude)`.
-    pub fn state(&self) -> (T, T) {
-        (self.estimated[0], self.estimated[1])
-    }
+    
 }
 
 // **** Predict ****
@@ -134,7 +139,7 @@ where
 {
     /// Phase 1: Predict state forward using IMU/Physics
     /// Call this at the IMU frequency or fixed control loop rate.
-    pub fn predict(&mut self, acc: T, dt: T) -> [T; 3] {
+    pub fn predict(&mut self, acc: T, dt: T) {
         // States are a 3d vector with components: velocity, altitude, and bias.
         // Destructure the state vectors as references with meaningful names, for code legibility (Zero cost abstraction).
         //let Vector3 { x: estimated_velocity, y: estimated_altitude, z: estimated_bias } = self.estimated;
@@ -163,8 +168,6 @@ where
 
         // Safety: If no measurement arrives, the estimate tracks the prediction
         self.estimated = self.predicted;
-
-        self.predicted
     }
 }
 
@@ -172,7 +175,7 @@ where
 
 impl<T> KalmanFilterZ<T>
 where
-    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math + KalmanFilterZConstants,
+    T: Copy + ConstZero + ConstOne + FloatCore + Matrix3x3Math,
 {
     /// Phase 2 Altitude Correction using new measurement.
     #[allow(non_snake_case)]

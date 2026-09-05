@@ -95,6 +95,25 @@ Three Kalman filters are provided:
 2. `KalmanFilterXY` - a filter to estimate 2D position and velocity.
 3. `KalmanFilterXYZ` - a filter to estimate 3D position and velocity.
 
+## 3D Kalman filter
+
+When using a Kalman filter for 3D there are two possible implementation choices:
+
+1. Use a `KalmanFilterXYZ`.
+2. Use a spilt architecture: use a `KalmanFilterXY` for horizontal position, and a `KalmanFilterZ` for vertical position.
+
+| Feature            | Split Architecture (1D + 2D)                                     | Unified 3D Architecture                             |
+| ------------------ | ---------------------------------------------------------------- | --------------------------------------------------- |
+| Computational Cost | Lower (2×2 and 4×4 matrices )                                    | Higher (6×6 and 9×9 matrices)                       |
+| Sensor Coupling    | Independent (Barometer noise cannot corrupt horizontal accuracy) | Coupled (Vertical errors can bleed into horizontal) |
+| Tuning Complexity  | Easier (can tune vertical and horizontal separately)             | Harder                                              |
+| Fault Tolerance    | Higher                                                           | Lower                                               |
+
+For vehicles that stay upright, or tilt minimally (eg a walker, a car, or a cinematic quadcopter) the split approach is a good one.
+
+For vehicles such as acrobatic quadcopters or rockets, where pitching and rolling movements are common,
+the combined approach is better.
+
 ## Position Kalman filter internals
 
 A Kalman filter works by predicting an object's state using a physical model of the object. So, for example,

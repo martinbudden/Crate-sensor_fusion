@@ -1,6 +1,6 @@
 [package]
 name = "sensor-fusion"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 authors = ["Martin Budden"]
 license = "MIT OR Apache-2.0"

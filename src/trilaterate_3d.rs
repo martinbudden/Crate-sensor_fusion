@@ -7,8 +7,8 @@ pub type Anchor3df32 = Anchor3d<f32>;
 pub type Anchor3df64 = Anchor3d<f64>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "std", derive(derive_more::Display))]
-#[cfg_attr(feature = "std", display("V{{x:{x}, y:{y}}}"))]
+//#[cfg_attr(feature = "std", derive(derive_more::Display))]
+//#[cfg_attr(feature = "std", display("V{{x:{x}, y:{y}}}"))]
 pub struct Anchor3d<T> {
     pub pos: Vector3<T>,
     pub distance: T,

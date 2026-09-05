@@ -8,8 +8,8 @@ pub type Anchor2df32 = Anchor2d<f32>;
 pub type Anchor2df64 = Anchor2d<f64>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "std", derive(derive_more::Display))]
-#[cfg_attr(feature = "std", display("V{{x:{x}, y:{y}}}"))]
+//#[cfg_attr(feature = "std", derive(derive_more::Display))]
+//#[cfg_attr(feature = "std", display("V{{x:{x}, y:{y}}}"))]
 pub struct Anchor2d<T> {
     pub pos: Vector2<T>,
     pub distance: T,

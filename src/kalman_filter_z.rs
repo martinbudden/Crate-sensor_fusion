@@ -19,15 +19,13 @@ pub struct KalmanFilterZ<T> {
     Q_bias: T,
 }
 
-impl Default for KalmanFilterZf32
-{
+impl Default for KalmanFilterZf32 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Default for KalmanFilterZf64
-{
+impl Default for KalmanFilterZf64 {
     fn default() -> Self {
         Self::new()
     }
@@ -40,8 +38,7 @@ impl<T> KalmanFilterZ<T> {
     const BIAS: usize = 2;
 }
 
-impl KalmanFilterZf32
-{
+impl KalmanFilterZf32 {
     /// Constructor.
     #[must_use]
     pub const fn new() -> Self {
@@ -56,8 +53,7 @@ impl KalmanFilterZf32
     }
 }
 
-impl KalmanFilterZf64
-{
+impl KalmanFilterZf64 {
     /// Constructor.
     #[must_use]
     pub const fn new() -> Self {
@@ -72,7 +68,7 @@ impl KalmanFilterZf64
     }
 }
 
-impl<T:Copy> KalmanFilterZ<T> {
+impl<T: Copy> KalmanFilterZ<T> {
     #[inline]
     #[must_use]
     pub fn pos(&self) -> T {
@@ -126,8 +122,6 @@ where
     pub fn set_velocity(&mut self, velocity: T) {
         self.estimated[0] = velocity;
     }
-
-    
 }
 
 // **** Predict ****

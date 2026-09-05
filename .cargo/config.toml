@@ -1,0 +1,9 @@
+[alias]
+# Run using: 'cargo test-none'
+test-none = [ "test", "--no-default-features"]
+test-libm = [ "test", "--no-default-features", "--features", "libm"]
+test-std = [ "test", "--no-default-features", "--features", "std"]
+
+check-none = [ "check", "--no-default-features"]
+check-libm = [ "check", "--no-default-features", "--features", "libm"]
+check-std = [ "check", "--no-default-features", "--features", "std"]

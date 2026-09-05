@@ -21,7 +21,9 @@ rustc_version = "0.4.1"
 
 [features]
 default = ["libm"]
-std = ["num-traits/std", "vqm/std"] # Propagates std upwards properly
+#default = ["std"]
+std = ["num-traits/std", "vqm/std"]
+#std = ["num-traits/std", "vqm/std", "derive_more/std"]
 libm = ["dep:libm", "num-traits/libm", "vqm/libm"]
 align = ["vqm/align"]
 simd = ["vqm/simd"]
@@ -33,6 +35,7 @@ vqm = { version = "0.1.16" }
 #vqm = { path = "../vqm"  }
 num-traits = { version = "0.2.19", default-features = false }
 libm = { version = "0.2.16", optional = true }
+# derive_more = { version = "2.1.1", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }

@@ -49,7 +49,7 @@ impl KalmanFilterZWithSensorsf64 {
     }
 }
 
-impl<T:Copy> KalmanFilterZWithSensors<T> {
+impl<T: Copy> KalmanFilterZWithSensors<T> {
     #[inline]
     #[must_use]
     pub fn pos(&self) -> T {

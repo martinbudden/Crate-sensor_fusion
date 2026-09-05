@@ -73,14 +73,18 @@ both the Mahony filter and the Madgwick filter are faster and don't suffer from 
 
 The `FuseAccGyro` and `FuseAccGyroMag` traits allow method-call syntax to be used:
 
-```text
-use crate::sensor_fusion::{FuseAccGyro,FuseAccGyroMag,MadgwickFilterf32};
+```rust
+use {crate::sensor_fusion::{FuseAccGyro, FuseAccGyroMag, MadgwickFilterf32}, vqm::Vector3f32};
 
+let dt = 0.001;
 let mut madgwick = MadgwickFilterf32::default();
+let acc = Vector3f32::default();
+let gyro = Vector3f32::default();
+let mag = Vector3f32::default();
 
-let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick, dt);
+let orientation = (acc, gyro).fuse_acc_gyro_using(&mut madgwick, dt);
 // or
-let orientation = (acc, gyro_rps, mag).fuse_acc_gyro_mag_using(&mut madgwick, dt);
+let orientation = (acc, gyro, mag).fuse_acc_gyro_mag_using(&mut madgwick, dt);
 ```
 
 ## Kalman filter
@@ -102,22 +106,37 @@ to correct the prediction (essentially by taking a weighted average of the predi
 
 The naive implementation of a 3D Position Kalman filter is extremely computationally intensive.
 
-To predict position using a gyroscope, accelerometer, and magnetometer, you need a massive 18x18 covariance matrix.
-Even if you don't use a magnetometer, you need a 15x15 matrix.
+To predict 3D position using a gyroscope, accelerometer, you need a massive 15x15 covariance matrix, even in 2D
+you need a 10x10 matrix.
 
-Furthermore, since the gyroscope measurements need to be filtered non-linearly, an Linear Kalman Filter (LKF),
+Furthermore, since combining gyroscope and accelerometer measurements is an non-linear operation, a Linear Kalman Filter (LKF),
 cannot be used: an Extended Kalman Filter (EKF) is required. An EKF is even more computationally intensive:
 as well as doing the multiplication of these large matrices it also needs to calculate
 [Jacobians](https://en.wikipedia.org/wiki/Jacobian_matrix_and_determinant).
 
 Fortunately there are a number of things that can be done to reduce this computational load.
 
-Firstly we use a sensor fusion filter (ie a Mahony or Madgwick) filter to fuse the gyroscope, accelerometer,
-and (optionally) magnetometer readings into a single acceleration vector. This reduces the covariance matrix to
-more manageable size of 9x9. What's more since the sensor fusion linearizes the sensor input, we can now use an LKF,
-rather than an EKF.
+Firstly we remove the responsibility for calculating the orientation from the Kalman filter:
+we use a another sensor fusion filter (ie a Mahony or Madgwick) filter to do this.
 
-But we are still not out of the woods: multiplying two 9x9 matrices requires 729 individual arithmetic operations.
+This reduces the covariance matrix to more manageable size of 9x9.
+What's more, prediction using a accelerometer alone is a linear operation, so we can use a LFK rather than an EKF.
+
+```text
+   ┌─────┐  Acc/Gyro  ┌─────────────────┐
+   │ IMU ├──────────► │ MADGWICK FILTER ├──► Orientation Quaternion
+   └─────┘            └─────────────────┘
+      │
+      │ Acc
+      │            ┌────────────────────────┐
+      └──────────► │ POSITION KALMAN FILTER ├──► Position Vector
+                   └────────────────────────┘    Velocity Vector
+                                │
+   GPS & Barometer  ──►─────────┘
+```
+
+But we are still not out of the woods: multiplying two 9x9 matrices requires 729 individual arithmetic operations,
+matrix inversion even more.
 And the Kalman filter predict and correct steps each require several matrix operations.
 
 TODO: further explanation of Kalman filter internals in readme.

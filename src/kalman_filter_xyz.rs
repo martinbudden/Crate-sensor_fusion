@@ -19,16 +19,17 @@ Action: Decrease Q or Increase R.
 /// The system is split into two cleanly decoupled steps. This:
 /// 1. reduces the covariance matrix from 15x15 to 9x9.
 /// 2. allows a Linear Kalman Filter (rather than an Extended Kalman Filter) to be used.
+///
 /// ```text
-///   ┌──────────────┐
-///   │ IMU Acc/Gyro ├──► [ MADGWICK FILTER ] ──► Orientation Quaternion
-///   └──────────────┘             │
-///                                │ Acceleration (transformed to Earth Frame)
+///   ┌─────┐  Acc/Gyro  ┌─────────────────┐
+///   │ IMU ├──────────► │ MADGWICK FILTER ├──► Orientation Quaternion
+///   └─────┘            └─────────────────┘
+///      │ Acc
+///      │            ┌────────────────────────┐
+///      └──────────► │ POSITION KALMAN FILTER ├──► Position Vector
+///                   └────────────────────────┘    Velocity Vector
 ///                                │
-///                                ▼
-///                 [ 3D POSITION KALMAN FILTER ] ──► Position and Velocity Vectors
-///                                │
-///   GPS & Barometer  ────────────┘
+///   GPS & Barometer  ──►─────────┘
 /// ```
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]

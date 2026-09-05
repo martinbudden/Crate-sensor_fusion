@@ -126,6 +126,7 @@ pub fn trilaterate_3d_weighted(anchors: &[Anchor3df32]) -> Option<Vector3f32> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
 
     // Helper constant for floating-point tolerance comparisons
@@ -162,7 +163,6 @@ mod tests {
 
         calculate_distances(position, &mut anchors);
 
-        #[allow(clippy::expect_used)]
         let result = trilaterate_3d_weighted(&anchors).expect("Should successfully calculate coordinate");
 
         // Validate that calculated values match the true location within tolerance
@@ -202,7 +202,6 @@ mod tests {
         // Artificially corrupt the distance on the 5th anchor by adding 15 meters of noise
         anchors[4].distance += 15.0;
 
-        #[allow(clippy::expect_used)]
         let result = trilaterate_3d_weighted(&anchors).expect("Should compute coordinate despite noise");
 
         // The target coordinates should stay highly accurate because the bad sensor's weight is near zero
@@ -243,7 +242,6 @@ mod tests {
         // Ensure its absolute junk data stays corrupted
         anchors[4].distance = 999.0;
 
-        #[allow(clippy::expect_used)]
         let result = trilaterate_3d_weighted(&anchors).expect("Should compute coordinate");
 
         assert!((result.x - position.x).abs() < EPSILON);

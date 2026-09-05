@@ -361,7 +361,6 @@ impl KalmanFilterXYWithSensors {
     }
 }
 
-#[allow(unused)]
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Snapshot {

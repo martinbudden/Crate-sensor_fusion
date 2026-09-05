@@ -1,9 +1,9 @@
-use vqm::{Quaternion, Quaternionf32, Vector3, Vector3f32};
+use vqm::{Quaternion, Quaternionf32, Vector3};
 
 /// Common interface for the sensor fusion filters (Madgwick, Mahony, complementary).
 /// ```
 /// use vqm::{Vector3f32,Quaternionf32};
-/// use sensor_fusion::{MadgwickFilterf32,SensorFusion};
+/// use sensor_fusion::{MadgwickFilterf32, SensorFusion};
 ///
 /// let mut madgwick_filter = MadgwickFilterf32::default();
 ///
@@ -25,22 +25,11 @@ pub trait SensorFusion<T> {
     fn correct_yaw_with_gain(&mut self, yaw_radians: T, gain: T, delta_t: T) -> Quaternion<T>;
 }
 
-#[allow(unused)]
-pub trait SensorFusionf32 {
-    fn set_gains(&mut self, gain0: f32, gain1: f32);
-    fn requires_initialization() -> bool;
-
-    fn fuse_acc_gyro(&mut self, acc: Vector3f32, gyro_rps: Vector3f32, delta_t: f32) -> Quaternionf32;
-    fn fuse_acc_gyro_mag(&mut self, acc: Vector3f32, gyro: Vector3f32, mag: Vector3f32, delta_t: f32) -> Quaternionf32;
-    fn correct_yaw(&mut self, yaw_radians: f32, gain: f32, delta_t: f32) -> Quaternionf32;
-}
-
-#[allow(clippy::doc_paragraphs_missing_punctuation)]
 /// Trait to allow sensor fusion filters to be used with method-call syntax, ie:<br>
 /// `let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick, dt);`
 /// ```
-/// use vqm::{Vector3f32,Quaternionf32};
-/// use sensor_fusion::{MadgwickFilterf32,SensorFusion,FuseAccGyro};
+/// use vqm::{Vector3f32, Quaternionf32};
+/// use sensor_fusion::{MadgwickFilterf32, SensorFusion, FuseAccGyro};
 ///
 /// let mut madgwick_filter = MadgwickFilterf32::default();
 ///
@@ -62,7 +51,6 @@ impl<T> FuseAccGyro<T> for (Vector3<T>, Vector3<T>) {
     }
 }
 
-#[allow(clippy::doc_paragraphs_missing_punctuation)]
 /// Trait to allow sensor fusion filters to be used with method-call syntax, ie:<br>
 /// `let orientation = (acc, gyro_rps).fuse_acc_gyro_using(&mut madgwick, dt);`
 /// ```
@@ -108,8 +96,9 @@ mod tests {
     use super::*;
     use vqm::Vector3f32;
 
-    #[allow(dead_code)]
-    pub struct TestStruct;
+    #[allow(unused)]
+    struct TestStruct;
+
     impl SensorFusion<f32> for TestStruct {
         fn set_gains(&mut self, _gain0: f32, _gain1: f32) {}
         fn gains(&self) -> (f32, f32) {
@@ -136,7 +125,6 @@ mod tests {
         }
     }
 
-    //#[allow(dead_code)]
     #[test]
     fn sensor_fusion() {
         let mut test_struct: TestStruct = TestStruct {};

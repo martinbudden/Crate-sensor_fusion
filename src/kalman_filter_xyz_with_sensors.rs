@@ -431,7 +431,6 @@ impl KalmanFilterXYZWithSensors {
     }
 }
 
-#[allow(unused)]
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Snapshot {
@@ -637,7 +636,12 @@ mod tests_downsampled {
                 let packet = gps_latency_queue.remove(0);
                 // Execute the rewind, past-correction, and fast-forward sequence
                 #[allow(clippy::cast_precision_loss)]
-                filter.correct_position_delayed_with_rewind(packet.position, r_gps, packet.time_stamp, dt * SKIP_FACTOR as f32);
+                filter.correct_position_delayed_with_rewind(
+                    packet.position,
+                    r_gps,
+                    packet.time_stamp,
+                    dt * SKIP_FACTOR as f32,
+                );
             }
 
             // Output trace telemetry data every 1 second to inspect convergence trends

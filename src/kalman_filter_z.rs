@@ -54,11 +54,12 @@ where
     const Q1: T = T::ONE_HUNDREDTH;
     const Q3: T = T::ONE;
 }
+
 impl<T> KalmanFilterZ<T> {
     /// indices to access matrix rows.
-    const VELOCITY: usize = 0;
-    const ALTITUDE: usize = 1;
-    const BIAS: usize = 2;
+    pub const VELOCITY: usize = 0;
+    pub const ALTITUDE: usize = 1;
+    pub const BIAS: usize = 2;
 }
 
 impl<T> KalmanFilterZ<T>

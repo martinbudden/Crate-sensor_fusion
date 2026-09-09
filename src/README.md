@@ -47,7 +47,7 @@ during the time-propagation step, pushing the physics model forward. Absolute re
 
 ```text
     ⎡  1    0   -dT    ⎤          ⎡ -dT² * q_vel    0            0      ⎤
-A = ⎢ dT    1     0    ⎥      Q = ⎢      0          0            0      ⎥
+F = ⎢ dT    1     0    ⎥      Q = ⎢      0          0            0      ⎥
     ⎣  0    0   1+β*dT ⎦          ⎣      0          0      dT² * q_bias ⎦
 ```
 
@@ -71,35 +71,44 @@ S = (H * P * Hᵀ) + R = ⎢ P₂₁  P₂₂  P₂₃ ⎥ + ⎢    0     R_hori
 
 <https://thekalmanfilter.com/kalman-filter-explained-simply/>
 
-|   | description                                           | type                | usage        |
-| - | ----------------------------------------------------- | ------------------- | ------------ |
-| z | measurement                                           | m x 1 column vector | Input        |
-| R | measurement noise covariance                          | m x m matrix        | Input        |
-| x | state vector                                          | n x 1 column vector | Output       |
-| P | state covariance matrix                               | n x n matrix        | System Model |
-| F | state transition matrix                               | n x n matrix        | System Model |
-| S | innovation covariance matrix                          | n x n matrix        | System Model |
-| H | state-to-measurement matrix<br>aka observation matrix | m x n matrix        | System Model |
-| Q | process noise covariance                              | n x n matrix        | System Model |
-| K | Kalman Gain                                           | n x m               | Internal     |
+|   | description                  | type         | usage        |
+| - | ---------------------------- | ------------ | ------------ |
+| z | measurement vector           | m x 1 vector | Input        |
+| R | measurement noise covariance | m x m matrix | Input        |
+| x | state vector                 | n x 1 vector | Output       |
+| y | measurement residual         | n x 1 vector | Internal     |
+| P | state covariance matrix      | n x n matrix | System Model |
+| F | state transition matrix      | n x n matrix | System Model |
+| S | residual covariance matrix   | n x n matrix | System Model |
+| H | measurement matrix           | m x n matrix | System Model |
+| Q | process noise covariance     | n x n matrix | System Model |
+| K | Kalman Gain                  | n x m        | Internal     |
+
+Alternate terms used in the literature and implementations
+
+`S` - innovation covariance matrix
+`F` - sometimes represented as `A`
+`H` - observation matrix
+`y` - innovation, error, observation vector
 
 For a 1D KalmanFilter n = 3, m = 1,
 For a 2D KalmanFilter n = 6, m = 2,
 For a 3D KalmanFilter n = 9, m = 3,
 
-Note n = 3*m, since we have (velocity, altitude, bias) for each dimension.
+Note n = 3*m, since we have {pos, velocity, acc_bias} for each dimension.
 
-|   |type          | 1D  | 2D  | 2D opt | 3D  | 3D opt |
-| - | ------------ | --- | --- | -------| --- | ------ |
-| x | n x 1 vector | 3x1 | 6x1 | 6x1    | 9x1 | 9x1    |
-| R | m x m matrix | 1x1 | 2x2 | 2x1    | 3x3 | 3x1    |
-| z | m x 1 vector | 1   | 2   | 2      | 3   | 3      |
-| P | n x n matrix | 3x3 | 6x6 | sparse | 9x9 | sparse |
-| F | n x n matrix | 3x3 | 6x6 | sparse | 9x9 | sparse |
-| S | n x n matrix | 3x3 | 6x6 | 2x2    | 9x9 | 3x3    |
-| H | m x n matrix | 1x3 | 2x6 | sparse | 3x9 | sparse |
-| Q | n x n matrix | 3x3 | 6x6 | 2x1    | 9x9 | 2x1    |
-| K | n x m matrix | 3x1 | 6x2 | 3xM2x2 | 9x2 | 3xM3x3 |
+|   |type          | 1D  | 2D  | 2D opt    | 3D  | 3D opt    | explanation |
+| - | ------------ | --- | --- | ----------| --- | --------- | ----------- |
+| x | n x 1 vector | 3x1 | 6x1 | V2x3      | 9x1 | V3x3      |             |
+| y | n x 1 vector | 3x1 | 6x1 | V2x3      | 9x1 | V3x3      |             |
+| R | m x m matrix | 1x1 | 2x2 | 2x1       | 3x3 | V3        | diagonal    |
+| z | m x 1 vector | 1x1 | 2x1 | V2        | 3x1 | V3        |             |
+| P | n x n matrix | 3x3 | 6x6 | M3x3xM2x2 | 9x9 | M3x3xM3x3 | sparse      |
+| F | n x n matrix | 3x3 | 6x6 | M3x3xM2x2 | 9x9 | M3x3xM3x3 | sparse      |
+| S | n x n matrix | 3x3 | 6x6 | M2x2      | 9x9 | M3x3      |             |
+| H | m x n matrix | 1x3 | 2x6 | virtual   | 3x9 | virtual   | sparse      |
+| Q | n x n matrix | 3x3 | 6x6 | 2x1       | 9x9 | 2x1       | vel, bias   |
+| K | n x m matrix | 3x1 | 6x2 | 3xM2x2    | 9x3 | 3xM3x3    |             |
 
 In the optimized form the following is used
 For 3D:
@@ -115,13 +124,31 @@ For 3D:
 
 ```text
 Predict: 
-    x = F * x, 
+    x = F * x 
     P_new = F * P * Fᵀ + Q
 
 Correct: 
     S = H * P * Hᵀ + R
-    K = P * Hᵀ * S^-1
-    error = z - H * x, 
-    x += K * error,
+    K = P * Hᵀ * S⁻¹
+    y = z - H * x
+    x = x + K * y
+
+    covariance update:
+    P = P - (K * H) * P
+    or
+    Joseph's Stabilized Form for the covariance update step, computationally more expensive, numerically stabler
+    P = (I - KH) * P * (I - KH)ᵀ + KRKᵀ
+```
+
+```text
+Predict: 
+    state = F * state, 
+    P_new = F * P * Fᵀ + Q
+
+Correct: 
+    S = H * P * Hᵀ + R
+    K = P * Hᵀ * S⁻¹
+    residual = measurement - H * state 
+    state += K * residual
     P -= (K * H) * P
 ```

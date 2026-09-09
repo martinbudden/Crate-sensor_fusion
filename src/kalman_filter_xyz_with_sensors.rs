@@ -2,7 +2,7 @@ use vqm::{Matrix3x3f32, Vector2f32, Vector3f32};
 
 use super::KalmanFilterXYZ;
 
-/// `f32` variant of `PositionKalmanFilterExtended`.
+/// `f32` variant of `KalmanFilterXYZWithSensors`.
 pub type KalmanFilterXYZWithSensorsf32 = KalmanFilterXYZWithSensors;
 
 /*
@@ -29,6 +29,8 @@ pub struct KalmanFilterXYZWithSensors {
     pub R_rangefinder: f32,
     /// Absolute Measurement Noise variance for optical flow.
     pub R_optical_flow: Vector2f32,
+    /// Absolute Measurement Noise variance for ultra-wideband indoor positioning system..
+    pub R_ultra_wideband: f32,
     /// Delayed State Buffer for Retrodictive Updates.
     pub history: [Snapshot; Self::SNAPSHOT_SIZE], // Fixed circular window (e.g., handles up to 640ms of latency at 100Hz)
     pub head_idx: usize, // Current write pointer in our ring buffer
@@ -73,6 +75,8 @@ impl KalmanFilterXYZWithSensors {
             R_barometer: 0.03,
             R_rangefinder: 0.03,
             R_optical_flow: Vector2f32 { x: 0.04, y: 0.04 },
+            // 1cm to 10cm typical accuracy, use 10cm = 0.10m, = 0.01 variance for cheap modules.
+            R_ultra_wideband: 0.01,
             history: [Snapshot::default(); Self::SNAPSHOT_SIZE],
             head_idx: 0,
             system_time: 0.0,
@@ -87,19 +91,19 @@ impl KalmanFilterXYZWithSensors {
     #[inline]
     #[must_use]
     pub fn pos(&self) -> Vector3f32 {
-        self.base.pos
+        self.base.state.pos
     }
 
     #[inline]
     #[must_use]
     pub fn vel(&self) -> Vector3f32 {
-        self.base.vel
+        self.base.state.vel
     }
 
     #[inline]
     #[must_use]
     pub fn acc_bias(&self) -> Vector3f32 {
-        self.base.acc_bias
+        self.base.state.acc_bias
     }
 
     pub fn predict_state(&mut self, acc_measurement: Vector3f32, dt: f32) {
@@ -174,44 +178,52 @@ impl KalmanFilterXYZWithSensors {
     /// When a delayed measurement arrives, we calculate the innovation error using the past state vector (`past.pos`).
     /// We calculate the Kalman Gain vectors using the current active P matrix.
     /// We correct the current state vector directly.
-    pub fn correct_position_delayed(&mut self, position: Vector3f32, R: Vector3f32, sensor_time: f32, dt: f32) {
-        // Compute Kalman Gain using the PRESENT P matrix
-        let S = self.base.P[Self::PP].add_diagonal_vector(R);
+    pub fn correct_position_delayed(&mut self, measurement: Vector3f32, R: Vector3f32, sensor_time: f32, dt: f32) {
+        // Extract the submatrices representing H * P.
+        let P_pos = self.base.P[Self::PP];
+        let P_vel = self.base.P[Self::PV];
+        let P_acc_bias = self.base.P[Self::PB];
 
+        // Calculate S, the Residual Covariance matrix using the PRESENT P.
+        // S = H * P * Hᵀ + R
+        let S = P_pos.add_diagonal_vector(R);
         let Some(S_inv) = S.try_inverse() else {
             return;
         };
 
-        let K_pos = self.base.P[Self::PP] * S_inv;
-        let K_vel = self.base.P[Self::VP] * S_inv;
-        let K_acc_bias = self.base.P[Self::BP] * S_inv;
+        // Calculate K, the Kalman Gain using the PRESENT P.
+        let K_pos = P_pos * S_inv;
+        let K_vel = P_vel * S_inv;
+        let K_acc_bias = P_acc_bias * S_inv;
 
-        // Calculate the innovation error using the PAST position
         // Find the past state matching the sensor timestamp
         let Some((past, _)) = self.find_snapshot(sensor_time, dt) else {
             return;
         };
 
-        let error = position - past.pos;
+        // Calculate the residual using the PAST position.
+        // y = z - H * x
+        let residual = measurement - past.pos;
 
-        // 4. Directly update the PRESENT states
-        self.base.pos += K_pos * error;
-        self.base.vel += K_vel * error;
-        self.base.acc_bias += K_acc_bias * error;
+        // Directly update the PRESENT states
+        // x += K * y
+        self.base.state.pos += K_pos * residual;
+        self.base.state.vel += K_vel * residual;
+        self.base.state.acc_bias += K_acc_bias * residual;
 
-        // 5. Directly update the PRESENT P matrix block-by-block
-        let HP_pp = self.base.P[Self::PP];
-        let HP_pv = self.base.P[Self::PV];
-        let HP_pb = self.base.P[Self::PB];
-        self.base.P[Self::PP] -= K_pos * HP_pp;
-        self.base.P[Self::VP] -= K_vel * HP_pp;
-        self.base.P[Self::BP] -= K_acc_bias * HP_pp;
-        self.base.P[Self::PV] -= K_pos * HP_pv;
-        self.base.P[Self::VV] -= K_vel * HP_pv;
-        self.base.P[Self::BV] -= K_acc_bias * HP_pv;
-        self.base.P[Self::PB] -= K_pos * HP_pb;
-        self.base.P[Self::VB] -= K_vel * HP_pb;
-        self.base.P[Self::BB] -= K_acc_bias * HP_pb;
+        // Directly update the PRESENT P matrix block-by-block
+        // P -= K * (H * P)
+        self.base.P[Self::PP] -= K_pos * P_pos;
+        self.base.P[Self::VP] -= K_vel * P_pos;
+        self.base.P[Self::BP] -= K_acc_bias * P_pos;
+
+        self.base.P[Self::PV] -= K_pos * P_vel;
+        self.base.P[Self::VV] -= K_vel * P_vel;
+        self.base.P[Self::BV] -= K_acc_bias * P_vel;
+
+        self.base.P[Self::PB] -= K_pos * P_acc_bias;
+        self.base.P[Self::VB] -= K_vel * P_acc_bias;
+        self.base.P[Self::BB] -= K_acc_bias * P_acc_bias;
 
         self.base.P.enforce_symmetry();
     }
@@ -251,7 +263,7 @@ impl KalmanFilterXYZWithSensors {
     /// * Correct: Run the `correct_position` code on these reloaded past states using the new sensor data.
     /// * Fast-Forward: Loop forward through the rest of the buffer from that past index back up to the present head index,
     ///   re-running `predict_state` and `predict_covariance` for every intermediate step.
-    pub fn correct_position_delayed_with_rewind(
+    pub fn correct_position_delayed_with_fast_forward(
         &mut self,
         position: Vector3f32,
         R_gps: Vector3f32,
@@ -263,16 +275,16 @@ impl KalmanFilterXYZWithSensors {
         };
 
         // REWIND: Restore the past kinematic state variables
-        self.base.pos = past.pos;
-        self.base.vel = past.vel;
-        self.base.acc_bias = past.acc_bias;
+        self.base.state.pos = past.pos;
+        self.base.state.vel = past.vel;
+        self.base.state.acc_bias = past.acc_bias;
 
         // Splice the historical kinematic uncertainty blocks back into P
         self.base.P[Self::PP] = past.PP;
         self.base.P[Self::PV] = past.PV;
         self.base.P[Self::VP] = past.PV.transpose(); // Generate VP from upper transpose
         self.base.P[Self::VV] = past.VV;
-        // Bias blocks (PB, VB, BB, BP, BV) remain untouched at their current present values
+        // Bias blocks (PB, VB, BB, BP, BV) remain untouched and retain their present values
 
         // CORRECT: Run `correct_position` in the past
         self.base.correct_position(position, R_gps);
@@ -296,9 +308,9 @@ impl KalmanFilterXYZWithSensors {
         };
 
         // Rewind kinematics
-        self.base.pos = past.pos;
-        self.base.vel = past.vel;
-        self.base.acc_bias = past.acc_bias;
+        self.base.state.pos = past.pos;
+        self.base.state.vel = past.vel;
+        self.base.state.acc_bias = past.acc_bias;
         self.base.P[Self::PP] = past.PP;
         self.base.P[Self::PV] = past.PV;
         self.base.P[Self::VP] = past.PV.transpose();
@@ -313,8 +325,8 @@ impl KalmanFilterXYZWithSensors {
 
     fn fast_forward_timeline(&mut self, start_idx: usize, dt: f32, R_gps: Vector3f32, R_baro: f32) {
         // Save the corrected past snapshot back into history
-        self.history[start_idx].pos = self.base.pos;
-        self.history[start_idx].vel = self.base.vel;
+        self.history[start_idx].pos = self.base.state.pos;
+        self.history[start_idx].vel = self.base.state.vel;
         self.history[start_idx].PP = self.base.P[Self::PP];
         self.history[start_idx].PV = self.base.P[Self::PV];
         self.history[start_idx].VV = self.base.P[Self::VV];
@@ -328,21 +340,21 @@ impl KalmanFilterXYZWithSensors {
         while current_idx != target_idx {
             let next_step = self.history[current_idx];
 
-            // 1. Step time dynamics forward
+            // Step time dynamics forward
             self.predict_state(next_step.acc, playback_dt);
             self.predict_covariance(playback_dt);
 
-            // 2. Re-apply an intermediate GPS correction if it historically existed here
+            // Re-apply an intermediate GPS correction if it historically existed here
             if let Some(past_gps_measurement) = next_step.gps_pos {
                 self.base.correct_position(past_gps_measurement, R_gps);
             }
 
-            // 3. Re-apply an intermediate Baro correction if it historically existed here
+            // Re-apply an intermediate Baro correction if it historically existed here
             if let Some(past_baro_measurement) = next_step.baro_alt {
                 self.base.correct_altitude(past_baro_measurement, R_baro);
             }
 
-            // 4. Re-cache our new fully synchronized forward estimations back into history
+            // Re-cache our new fully synchronized forward estimations back into history
             self.history[current_idx].pos = self.pos();
             self.history[current_idx].vel = self.vel();
             self.history[current_idx].acc_bias = self.acc_bias();
@@ -513,7 +525,7 @@ mod tests_delayed {
             // Raw IMU measurement = Kinematic acceleration + Bias - Gravity reaction force
             let acc_measurement = true_acc_kinematic + true_bias - gravity;
 
-            // Step A: Run full 100Hz predictive filter step
+            // Step A: 100Hz predictive filter step
             filter.handle_imu_tick(acc_measurement, dt);
 
             // Step B: Asynchronous 10Hz GPS Sampling
@@ -531,7 +543,7 @@ mod tests_delayed {
                     let packet = gps_latency_queue.remove(0);
 
                     // Execute the rewind, past-correction, and fast-forward sequence
-                    filter.correct_position_delayed_with_rewind(packet.position, r_gps, packet.time_stamp, dt);
+                    filter.correct_position_delayed_with_fast_forward(packet.position, r_gps, packet.time_stamp, dt);
                 }
             }
 
@@ -636,7 +648,7 @@ mod tests_downsampled {
                 let packet = gps_latency_queue.remove(0);
                 // Execute the rewind, past-correction, and fast-forward sequence
                 #[allow(clippy::cast_precision_loss)]
-                filter.correct_position_delayed_with_rewind(
+                filter.correct_position_delayed_with_fast_forward(
                     packet.position,
                     r_gps,
                     packet.time_stamp,
@@ -778,7 +790,7 @@ mod tests_dual_sensor {
                 let packet = gps_queue.remove(0);
 
                 // Execute time travel update for the GPS
-                filter.correct_position_delayed_with_rewind(packet.position, r_gps, packet.time_stamp, dt);
+                filter.correct_position_delayed_with_fast_forward(packet.position, r_gps, packet.time_stamp, dt);
             }
 
             // Periodically log tracking errors to the console

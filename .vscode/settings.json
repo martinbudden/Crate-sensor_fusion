@@ -102,6 +102,7 @@
         "wasi",
         "wasip",
         "wasmparser",
+        "wideband",
         "winapi",
         "zerocopy",
         "zmij"

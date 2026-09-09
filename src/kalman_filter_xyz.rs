@@ -22,25 +22,20 @@ Action: Decrease Q or Increase R.
 ///
 /// ```text
 ///   ┌─────┐  Acc/Gyro  ┌─────────────────┐
-///   │ IMU ├──────────► │ MADGWICK FILTER ├──► Orientation Quaternion
+///   │ IMU ├──────────► │ MADGWICK FILTER ├──────► Orientation Quaternion
 ///   └─────┘            └─────────────────┘
-///      │ Acc
+///  Acc │────────────────────────────────────────► Acc
 ///      │            ┌────────────────────────┐
 ///      └──────────► │ POSITION KALMAN FILTER ├──► Position Vector
 ///                   └────────────────────────┘    Velocity Vector
 ///                                │
-///   GPS & Barometer  ──►─────────┘
+///   GPS, Barometer etc ─────►────┘
 /// ```
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct KalmanFilterXYZ {
-    // 3D Kinematic State Vectors
-    /// Position (x, y, z).
-    pub pos: Vector3f32,
-    /// Velocity (x, y, z).
-    pub vel: Vector3f32,
-    /// Accelerometer Bias (x, y, z).
-    pub acc_bias: Vector3f32,
+    /// 3D Kinematic State Vectors.
+    pub state: KalmanStateXYZ,
 
     // Predicted System Uncertainty Covariance Matrix (P).
     /// `P`: Prediction error covariance (aka state covariance matrix, the system's internal uncertainty).
@@ -84,6 +79,7 @@ impl KalmanFilterXYZ {
     #[must_use]
     pub fn new() -> Self {
         let mut P = Matrix3x3xM3x3f32::default();
+
         // Seed initial Position uncertainty (ie, confident within 1 meter)
         P[Self::PP][Self::M11] = 1.0;
         P[Self::PP][Self::M22] = 1.0;
@@ -100,9 +96,7 @@ impl KalmanFilterXYZ {
         P[Self::BB][Self::M33] = 0.01;
 
         Self {
-            pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
-            vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
-            acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            state: KalmanStateXYZ::new(),
             // A value of 0.05 implies that every second, we expect aerodynamic buffeting, vibration, or wind to naturally perturb the velocity
             // by roughly 0.22 m/s ie sqrt(0.05).
             Q_velocity: 0.05,
@@ -119,19 +113,19 @@ impl KalmanFilterXYZ {
     #[inline]
     #[must_use]
     pub fn pos(&self) -> Vector3f32 {
-        self.pos
+        self.state.pos
     }
 
     #[inline]
     #[must_use]
     pub fn vel(&self) -> Vector3f32 {
-        self.vel
+        self.state.vel
     }
 
     #[inline]
     #[must_use]
     pub fn acc_bias(&self) -> Vector3f32 {
-        self.acc_bias
+        self.state.acc_bias
     }
 }
 
@@ -145,7 +139,7 @@ impl KalmanFilterXYZ {
     ///
     /// ### Physical Mechanics
     /// ```math
-    /// 
+    ///
     /// pos_k = pos_k₋₁ + vel_k₋₁ * dT + 0.5 * acc * dT²
     /// vel_k = vel_k₋₁ + acc * dT
     /// ```
@@ -155,40 +149,31 @@ impl KalmanFilterXYZ {
 
         // Calculate true physical acceleration by removing bias and adding gravity
         // Note: in a NED frame, gravity is a positive vector pointing downwards, so it is added to the accelerometer measurement.
-        let acc = acc_measurement - self.acc_bias + gravity;
+        let acc = acc_measurement - self.state.acc_bias + gravity;
 
         // Physical mechanics
         // s = ut + 0.5 * a * t²
-        self.pos += (self.vel + 0.5 * acc * dt) * dt;
+        self.state.pos += (self.state.vel + 0.5 * acc * dt) * dt;
 
         // v = u + a * t
-        self.vel += acc * dt;
+        self.state.vel += acc * dt;
 
         // Bias remains constant during prediction, it is modeled as a random walk in covariance.
         // So `self.acc_bias` not updated.
     }
-    /*
-    Our state vector is organized as [{p}, {v}, {b}]ᵀ.
-    The kinematic transition equations using simple Euler integration are:
-    {p}_k = {p}_{k-1} + {v}_{k-1}Delta T
-    {v}_k = {v}_{k-1} - vec{b}_{k-1}Delta T (assuming acceleration is updated via the control loop)
-    {b}_k = {b}_{k-1}
-    This means our 9x9 matrix **F** is incredibly sparse, containing only a few *dt* terms on the off-diagonals.
-     If we write out the math for F * P * Fᵀ manually using 3x3 blocks, the matrix operations simplify into a clean sequence of 3x3 array updates.
-    */
+
     /// Predict covariance:
     ///
-    /// P = F * P * Fᵀ + Q.
+    /// `P = F * P * Fᵀ + Q`.
     ///
-    /// P: State covariance matrix
-    /// F: State transition matrix
-    /// Q: Process noise covariance.
-    ///
-    /// Propagates the 9x9 covariance matrix forward in time.
+    /// `P`: State covariance matrix
+    /// `F`: State transition matrix
+    /// `Q`: Process noise covariance.
     ///
     /// A full 9x9 matrix multiplication involves 729 individual arithmetic operations.
     /// Instead the matrix is divided into 9 separate 3x3 sub-matrices (blocks),
     /// and each block is processed separately.
+    ///
     /// ```text
     /// ┌                 9x9                  ┐
     /// │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
@@ -204,108 +189,87 @@ impl KalmanFilterXYZ {
     /// │ │ Position ││ Velocity ││ Bias     │ │
     /// │ └          ┘└          ┘└          ┘ │
     /// └                                      ┘
-    /// In a Kalman filter tracking Position (p), Velocity (v), and an Accelerometer Bias (b)
-    /// over a small time increment (dt),
-    /// the physical laws of motion dictate:
     ///
-    /// New Position = p + v * dt
-    /// New Velocity = v - b * dt  (Bias is subtracted from acceleration)
-    /// New Bias = b (Bias is modeled as a constant or random walk)
+    /// In a Kalman filter tracking Position (P), Velocity (V), and an Accelerometer Bias (B)
+    /// over a small time increment (dt), the physical laws of motion give:
+    ///     P_new = P + V * dt
+    ///     V_new = V - B * dt  (Bias is subtracted from acceleration)
+    ///     B_new = B (Bias is modeled as a constant or random walk)
     ///
-    ///Expressed as a 3x3 block state transition matrix, that gives:
+    /// Expressed as a 3x3 block state transition matrix, that gives:
     ///
-    /// ┌                 9x9                  ┐
-    /// │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
-    /// │ │    I     ││   dt.I   ││    0     │ │
-    /// │ └          ┘└          ┘└          ┘ │
-    /// │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
-    /// │ │    0     ││    I     ││  -dt.I   │ │
-    /// │ └          ┘└          ┘└          ┘ │
-    /// │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
-    /// │ │    0     ││    0     ││    I     │ │
-    /// │ └          ┘└          ┘└          ┘ │
-    /// └                                      ┘
+    ///     ┌                 9x9                  ┐
+    ///     │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
+    ///     │ │    I     ││   dt*I   ││    0     │ │
+    ///     │ └          ┘└          ┘└          ┘ │
+    ///     │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
+    /// F = │ │    0     ││    I     ││  -dt*I   │ │
+    ///     │ └          ┘└          ┘└          ┘ │
+    ///     │ ┌   3x3    ┐┌   3x3    ┐┌   3x3    ┐ │
+    ///     │ │    0     ││    0     ││    I     │ │
+    ///     │ └          ┘└          ┘└          ┘ │
+    ///     └                                      ┘
+    ///
+    /// Since this is a sparse matrix, we can calculate F * P * Fᵀ without doing full 9x9 matrix multiplications.
+    /// Instead we perform the multiplication block by block.
+    ///
+    /// Expanding F * P * Fᵀ algebraically gives the following block updates:
+    ///
+    /// For the position columns (PP, VP, BP)
+    ///     PP_new = PP + dt * (VP + PV) + dt^2 * VV
+    ///     VP_new = VP + dt * VV - dt * BP - dt^2 * BV
+    ///     BP_new = BP + dt * BV
+    /// For the velocity columns (PV, VV, BV)
+    ///     PV_new = PV + dt * VV - dt * PB - dt^2 * VB
+    ///     VV_new = VV - dt * (BV + VB) + dt^2 * BB
+    ///     BV_new = BV - dt * BB
+    /// For the bias columns (PB, VB, BB)
+    ///     PB_new = PB + dt * VB
+    ///     VB_new = VB - dt * BB
+    ///     BB_new = BB
     /// ```
-    ///
-    // =========================================================================
-    // COVARIANCE PROPAGATION DERIVATION: P_new = F * P * Fᵀ
-    //
-    // Continuous state transition dynamics layout:
-    // F = [ I    dt*I     0   ]
-    //     [ 0      I   -dt*I  ]
-    //     [ 0      0      I   ]
-    //
-    // Multiplying F * P * Fᵀ analytically yields the following block updates:
-    // =========================================================================
-    //
-    // =========================================================================
-    // POSITION COLUMNS (Blocks: PP, VP, BP)
-    // =========================================================================
-    //
-    // PP_new = PP + dt * (VP + PV) + dt^2 * VV
-    //
-    // VP_new = VP + dt * VV - dt * BP - dt^2 * BV
-    //
-    // BP_new = BP + dt * BV
-    //
-    // =========================================================================
-    //
-    // =========================================================================
-    // VELOCITY COLUMNS (Blocks: PV, VV, BV)
-    // =========================================================================
-    //
-    // PV_new = PV + dt * VV - dt * PB - dt^2 * VB
-    //
-    // VV_new = VV - dt * (BV + VB) + dt^2 * BB
-    //
-    // BV_new = BV - dt * BB
-    //
-    // =========================================================================
-    //
-    // =========================================================================
-    // BIAS COLUMNS (Blocks: PB, VB, BB)
-    // =========================================================================
-    //
-    // PB_new = PB + dt * VB
-    //
-    // VB_new = VB - dt * BB
-    //
-    // BB_new = BB
-    //
-    // =========================================================================
-    /// ## Formula
-    /// *  `P_k = F * P_k₋₁ * Fᵀ + Q`
+    #[allow(unused)]
     #[allow(non_snake_case)]
     pub fn predict_covariance(&mut self, dt: f32) {
-        // Capture the current a posteriori state (P_k₋₁).
-        let P_old = self.P;
-
         // =====================================================================
-        // PROPAGATE THE COVARIANCE (F * P * Fᵀ)
+        // PROPAGATE THE COVARIANCE P_new = (F * P_old * Fᵀ)
         // =====================================================================
 
         let dt2 = dt * dt;
-        // --- POSITION COLUMNS ---
-        self.P[Self::PP] = P_old[Self::PP] + (P_old[Self::VP] + P_old[Self::PV]) * dt + P_old[Self::VV] * dt2;
-        self.P[Self::VP] = P_old[Self::VP] + (P_old[Self::VV] - P_old[Self::BP]) * dt - P_old[Self::BV] * dt2;
-        self.P[Self::BP] = P_old[Self::BP] + P_old[Self::BV] * dt;
 
-        // --- VELOCITY COLUMNS ---
-        self.P[Self::PV] = P_old[Self::PV] + (P_old[Self::VV] - P_old[Self::PB]) * dt - P_old[Self::VB] * dt2;
-        self.P[Self::VV] = P_old[Self::VV] - (P_old[Self::BV] + P_old[Self::VB]) * dt + P_old[Self::BB] * dt2;
-        self.P[Self::BV] = P_old[Self::BV] - P_old[Self::BB] * dt;
+        // Avoid taking a copy of self.P by using temporary indices and shadowing them out of scope when they have been used.
+        // This ensures we cannot use an updated value in a subsequent update.
+        let (PP, VP, BP, PV, VV, BV, PB, VB, BB) =
+            (Self::PP, Self::VP, Self::BP, Self::PV, Self::VV, Self::BV, Self::PB, Self::VB, Self::BB);
 
-        // --- BIAS COLUMNS ---
-        self.P[Self::PB] = P_old[Self::PB] + P_old[Self::VB] * dt;
-        self.P[Self::VB] = P_old[Self::VB] - P_old[Self::BB] * dt;
-        self.P[Self::BB] = P_old[Self::BB];
+        // --- POSITION COLUMNS (PP, VP, BP) ---
+        self.P[PP] = self.P[PP] + (self.P[VP] + self.P[PV]) * dt + self.P[VV] * dt2;
+        let PP = (); // Stop P_new[PP] being used in subsequent calculations.
+        self.P[VP] = self.P[VP] + (self.P[VV] - self.P[BP]) * dt - self.P[BV] * dt2;
+        let VP = (); // Stop P_new[VP] being used in subsequent calculations.
+        self.P[BP] = self.P[BP] + self.P[BV] * dt;
+        let BP = (); // Stop P_new[BP] being used in subsequent calculations.
+
+        // --- VELOCITY COLUMNS (PV, VV, BV) ---
+        self.P[PV] = self.P[PV] + (self.P[VV] - self.P[PB]) * dt - self.P[VB] * dt2;
+        let PV = ();
+        self.P[VV] = self.P[VV] - (self.P[BV] + self.P[VB]) * dt + self.P[BB] * dt2;
+        let VV = ();
+        self.P[BV] = self.P[BV] - self.P[BB] * dt;
+        let BV = ();
+
+        // --- BIAS COLUMNS (PB, VB, BB) ---
+        self.P[PB] = self.P[PB] + self.P[VB] * dt;
+        let PB = ();
+        self.P[VB] = self.P[VB] - self.P[BB] * dt;
+        // self.P[Self::BB] = self.P[Self::BB]; don't need to update BB.
 
         // =====================================================================
         // APPLY PROCESS NOISE (Q)
         // =====================================================================
-        // Continuous process noise integrated over dt maps to the diagonal variance slots of Velocity and Bias.
 
-        // Standard continuous noise integration layout
+        // Continuous process noise integrated over dt maps to the diagonal variance slots of Velocity and Bias.
+        // P += Q
         self.P[Self::VV].add_diagonal_scalar_in_place(self.Q_velocity * dt);
         self.P[Self::BB].add_diagonal_scalar_in_place(self.Q_bias * dt);
 
@@ -325,50 +289,70 @@ impl KalmanFilterXYZ {
     /// *  `S = P₂₂ + R` (Innovation Variance calculation)
     /// *  `K = P_column_2 * (1.0 / S)` (Kalman Gain column selection extraction)
     /// *  `P = P - K * (H * P)` (Covariance correction step)
-    pub fn correct_altitude(&mut self, altitude: f32, R: f32) {
-        // Calculate the scalar innovation covariance: S = P_zz + R
-        let S = self.P[Self::PP][Matrix3x3xM3x3f32::M33] + R;
+    /*        let K_pos = self.P[Self::PP].column(2) * S_inv;
+           let K_vel = self.P[Self::VP].column(2) * S_inv;
+           let K_acc_bias = self.P[Self::BP].column(2) * S_inv;
+    */
+    pub fn correct_altitude(&mut self, altitude_measurement: f32, R: f32) {
+        // The altitude measurement directly observes position.z.
+        //
+        // H = [0 0 1   0 0 0   0 0 0]
 
-        // The the innovation "matrix" `S` may be non-invertible.
-        // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
-        if S == 0.0 {
-            return; // Avoid division by zero if S is singular
+        // S = H * P * Hᵀ + R
+        //
+        // Since H selects position.z:
+        // S = P_PP[z,z] + R
+
+        let S = self.P[Self::PP][Matrix3x3f32::M33] + R;
+
+        if S <= f32::EPSILON {
+            return;
         }
+
         let S_inv = 1.0 / S;
 
-        // Calculate the 9-element Kalman Gain vector: K = (P * Hᵀ) / S
-        // Multiplying P by Hᵀ is mathematically identical to extracting column(2) of P
-        let K_pos = self.P[Self::PP].column(2) * S_inv;
-        let K_vel = self.P[Self::VP].column(2) * S_inv;
-        let K_bias = self.P[Self::BP].column(2) * S_inv;
+        // P * Hᵀ
+        //
+        // H selects the Z position column (ie column 2), so these are:
+        //
+        // P_PP[:,z]
+        // P_VP[:,z]
+        // P_BP[:,z]
 
-        // Calculate the scalar innovation error
-        let error = altitude - self.pos.z;
+        let P_pos = self.P[Self::PP].column(2);
+        let P_vel = self.P[Self::VP].column(2);
+        let P_acc_bias = self.P[Self::BP].column(2);
 
-        // Update the state vectors
-        self.pos += K_pos * error;
-        self.vel += K_vel * error;
-        self.acc_bias += K_bias * error;
+        let K_pos = P_pos * S_inv;
+        let K_vel = P_vel * S_inv;
+        let K_acc_bias = P_acc_bias * S_inv;
 
-        // Extract the immutable Z-rows directly onto the CPU stack before any mutations happen
-        let HP_row_pp = self.P[Self::PP].row(2);
-        let HP_row_pv = self.P[Self::PV].row(2);
-        let HP_row_pb = self.P[Self::PB].row(2);
+        // State update.
+        let residual = altitude_measurement - self.state.pos.z;
 
-        // Column 0: Position Column Blocks
-        self.P[Self::PP] -= Matrix3x3::outer_product(K_pos, HP_row_pp);
-        self.P[Self::VP] -= Matrix3x3::outer_product(K_vel, HP_row_pp);
-        self.P[Self::BP] -= Matrix3x3::outer_product(K_bias, HP_row_pp);
+        self.state.pos += K_pos * residual;
+        self.state.vel += K_vel * residual;
+        self.state.acc_bias += K_acc_bias * residual;
 
-        // Column 1: Velocity Column Blocks
-        self.P[Self::PV] -= Matrix3x3::outer_product(K_pos, HP_row_pv);
-        self.P[Self::VV] -= Matrix3x3::outer_product(K_vel, HP_row_pv);
-        self.P[Self::BV] -= Matrix3x3::outer_product(K_bias, HP_row_pv);
+        // Covariance update:
+        //
+        // P -= (P Hᵀ)(H P) / S
+        //
+        // This is a rank-1 update.
+        self.P[Self::PP] -= Matrix3x3f32::outer_product(K_pos, P_pos);
+        self.P[Self::PV] -= Matrix3x3f32::outer_product(K_pos, P_vel);
+        self.P[Self::PB] -= Matrix3x3f32::outer_product(K_pos, P_acc_bias);
 
-        // Column 2: Bias Column Blocks
-        self.P[Self::PB] -= Matrix3x3::outer_product(K_pos, HP_row_pb);
-        self.P[Self::VB] -= Matrix3x3::outer_product(K_vel, HP_row_pb);
-        self.P[Self::BB] -= Matrix3x3::outer_product(K_bias, HP_row_pb);
+        self.P[Self::VP] -= Matrix3x3f32::outer_product(K_vel, P_pos);
+        self.P[Self::VV] -= Matrix3x3f32::outer_product(K_vel, P_vel);
+        self.P[Self::VB] -= Matrix3x3f32::outer_product(K_vel, P_acc_bias);
+
+        self.P[Self::BP] -= Matrix3x3f32::outer_product(K_acc_bias, P_pos);
+        self.P[Self::BV] -= Matrix3x3f32::outer_product(K_acc_bias, P_vel);
+        self.P[Self::BB] -= Matrix3x3f32::outer_product(K_acc_bias, P_acc_bias);
+
+        // Ensure numerical stability by enforcing symmetry on the covariance matrix.
+        self.P.enforce_symmetry();
     }
 
     /// Executes an asynchronous measurement update when a new 3D GPS reading arrives
@@ -391,57 +375,71 @@ impl KalmanFilterXYZ {
     /// * self.P: 9x9 Column-Major Covariance Matrix
     /// * position: Vector3f32 observation `[x, y, z]`
     /// * R: Vector3f32 diagonal measurement noise variance [R.x, R.y, R.z]
-    pub fn correct_position_delayed(&mut self, position: Vector3f32, past_pos: Vector3f32, R: Vector3f32) {
-        // Calculate the 3x3 Innovation Covariance matrix: S = H * P * Hᵀ + R
-        let S = self.P[Self::PP].add_diagonal_vector(R);
+    pub fn correct_position_standard_form(
+        &mut self,
+        measurement: Vector3f32,
+        predicted_measurement: Vector3f32,
+        R: Vector3f32,
+    ) {
+        // S = H * P * Hᵀ + R
+        // K = P * Hᵀ * S⁻¹
+        // y = z - H * x
+        // x += K * y
+        // P -= (K * H) * P
 
-        // The the innovation matrix may be non-invertible.
-        // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
+        // Extract the submatrices representing H * P.
+        let P_pos = self.P[Self::PP];
+        let P_vel = self.P[Self::PV];
+        let P_acc_bias = self.P[Self::PB];
+
+        // Calculate S, the Residual Covariance matrix:
+        // S = H * P * Hᵀ + R
+        let S = P_pos.add_diagonal_vector(R);
         let Some(S_inv) = S.try_inverse() else {
+            // The the Residual Covariance matrix may be non-invertible.
+            // This happens very rarely and is due to rounding errors when the process noise covariance Q is small.
             return;
         };
 
+        // Calculate the residual.
+        // y = z - H * x
+        let residual = measurement - predicted_measurement;
+
+        // Calculate K, the Kalman gain.
         // Calculate the 3x3 segmented Kalman Gain pieces
         //
-        // `K = P * Hᵀ * S_inv`
+        // K = P * Hᵀ * S⁻¹
         //
         // H selects the position column block stack (Column 0: PP, VP, BP)
         // H selects the position states, so P * Hᵀ is simply the first three columns of P,
         // represented by the first three Matrix3x3 blocks.
-        let K_pos = self.P[Self::PP] * S_inv;
-        let K_vel = self.P[Self::VP] * S_inv;
-        let K_acc_bias = self.P[Self::BP] * S_inv;
-
-        // Calculate the error vector.
-        let error = position - past_pos;
+        let K_pos = P_pos * S_inv;
+        let K_vel = P_vel * S_inv;
+        let K_acc_bias = P_acc_bias * S_inv;
 
         // Update the physical state vectors
-        self.pos += K_pos * error;
-        self.vel += K_vel * error;
-        self.acc_bias += K_acc_bias * error;
+        // x += K * y
+        self.state.pos += K_pos * residual;
+        self.state.vel += K_vel * residual;
+        self.state.acc_bias += K_acc_bias * residual;
 
-        // Extract the submatrices representing H * P.
-        let HP_pp = self.P[Self::PP];
-        let HP_pv = self.P[Self::PV];
-        let HP_pb = self.P[Self::PB];
-
-        // Calculate P -= K * (H * P), ie P = (I - K * H) * P
-        // by subtracting the K * (H * P) submatrices one by one.
+        // P -= K * (H * P)
+        // Calculate by subtracting the K * (H * P) submatrices one by one.
 
         // Column 0: position column submatrices
-        self.P[Self::PP] -= K_pos * HP_pp;
-        self.P[Self::VP] -= K_vel * HP_pp;
-        self.P[Self::BP] -= K_acc_bias * HP_pp;
+        self.P[Self::PP] -= K_pos * P_pos;
+        self.P[Self::VP] -= K_vel * P_pos;
+        self.P[Self::BP] -= K_acc_bias * P_pos;
 
-        // Column 1: velocity Column submatrices
-        self.P[Self::PV] -= K_pos * HP_pv;
-        self.P[Self::VV] -= K_vel * HP_pv;
-        self.P[Self::BV] -= K_acc_bias * HP_pv;
+        // Column 1: velocity column submatrices
+        self.P[Self::PV] -= K_pos * P_vel;
+        self.P[Self::VV] -= K_vel * P_vel;
+        self.P[Self::BV] -= K_acc_bias * P_vel;
 
         // Column 2: bias column submatrices
-        self.P[Self::PB] -= K_pos * HP_pb;
-        self.P[Self::VB] -= K_vel * HP_pb;
-        self.P[Self::BB] -= K_acc_bias * HP_pb;
+        self.P[Self::PB] -= K_pos * P_acc_bias;
+        self.P[Self::VB] -= K_vel * P_acc_bias;
+        self.P[Self::BB] -= K_acc_bias * P_acc_bias;
 
         // Ensure numerical stability by enforcing symmetry on the covariance matrix.
         self.P.enforce_symmetry();
@@ -453,35 +451,41 @@ impl KalmanFilterXYZ {
     ///
     /// While computationally more expensive, it guarantees the result remains positive-definite.
     /// That is it ensures the covariance matrix has positive eigenvalues and remains valid and invertible for future updates.
-    pub fn correct_position_delayed_joseph(&mut self, position: Vector3f32, past_pos: Vector3f32, R: Vector3f32) {
-        // Calculate the 3x3 Innovation Covariance matrix:
+    pub fn correct_position_joseph_stabilized_form(
+        &mut self,
+        measurement: Vector3f32,
+        predicted_measurement: Vector3f32,
+        R: Vector3f32,
+    ) {
+        // Calculate S, the Residual Covariance matrix:
         // S = H * P * Hᵀ + R
         let S = self.P[Self::PP].add_diagonal_vector(R);
 
-        // The the innovation matrix may be non-invertible.
-        // This happens very rarely and is due to rounding errors when the process noise covariance `Q` is small.
+        // The the Residual Covariance matrix may be non-invertible.
+        // This happens very rarely and is due to rounding errors when the process noise covariance Q is small.
         let Some(S_inv) = S.try_inverse() else {
             return;
         };
 
-        // Kalman Gain pieces
+        // Calculate K, the Kalman gain.
+        // `K = P * Hᵀ * S⁻¹`
         let K_pos = self.P[Self::PP] * S_inv;
         let K_vel = self.P[Self::VP] * S_inv;
         let K_acc_bias = self.P[Self::BP] * S_inv;
 
-        // State Update
-        let error = position - past_pos;
-        self.pos += K_pos * error;
-        self.vel += K_vel * error;
-        self.acc_bias += K_acc_bias * error;
+        // Calculate the residual.
+        // y = z - H * x
+        let residual = measurement - predicted_measurement;
 
-        // Precompute Transposes & Helper terms
-        let K_pos_t = K_pos.transpose();
-        let K_vel_t = K_vel.transpose();
-        let K_acc_bias_t = K_acc_bias.transpose();
-        let I_minus_K_pos_t = Matrix3x3f32::identity() - K_pos_t; // Simplified distribution
+        // Update the physical state vectors
+        // x += K * y
+        self.state.pos += K_pos * residual;
+        self.state.vel += K_vel * residual;
+        self.state.acc_bias += K_acc_bias * residual;
 
-        // Calculate the columns of intermediate matrix A = (I - KH)P
+        // P = (I - KH) * P * (I - KH)ᵀ + KRKᵀ
+
+        // Calculate the columns of intermediate matrix A = (I - KH) * P
         let A = Matrix3x3xM3x3::from_column_array([
             // Column 0
             self.P[Self::PP] - K_pos * self.P[Self::PP],
@@ -496,6 +500,12 @@ impl KalmanFilterXYZ {
             self.P[Self::VB] - K_vel * self.P[Self::PB],
             self.P[Self::BB] - K_acc_bias * self.P[Self::PB],
         ]);
+
+        // Precompute transposes and helper terms
+        let K_pos_t = K_pos.transpose();
+        let K_vel_t = K_vel.transpose();
+        let K_acc_bias_t = K_acc_bias.transpose();
+        let I_minus_K_pos_t = Matrix3x3f32::identity() - K_pos_t; // Simplified distribution
 
         // Calculate J = A * (I - KH)ᵀ.
         // Only calculate the values that are different from A.
@@ -527,7 +537,7 @@ impl KalmanFilterXYZ {
         self.P.enforce_symmetry();
     }
 
-    pub fn correct_position_xy_delayed(&mut self, position: Vector2f32, past_pos: Vector3f32, R: Vector2f32) {
+    pub fn correct_position_xy_standard_form(&mut self, position: Vector2f32, past_pos: Vector3f32, R: Vector2f32) {
         // TODO: implement correct_position_xy_delayed.
         _ = self;
         _ = position;
@@ -535,16 +545,123 @@ impl KalmanFilterXYZ {
         _ = past_pos;
     }
 
+    pub fn correct_position_using_anchor_distance(
+        &mut self,
+        anchor_position: Vector3f32,
+        measured_distance: f32,
+        mahalanobis_squared_threshold: f32,
+        R: f32,
+    ) {
+        const MIN_DISTANCE: f32 = 1.0e-4;
+
+        if measured_distance < 0.0 {
+            return;
+        }
+        // Position relative to the anchor.
+        let position = self.state.pos - anchor_position;
+
+        // Predicted range.
+        let predicted_distance = position.norm();
+
+        // The range Jacobian is undefined at zero distance.
+        if predicted_distance <= MIN_DISTANCE {
+            return;
+        }
+
+        // Jacobian with respect to position:
+        //
+        // H = [ dx/r, dy/r, dz/r ]
+        //
+        // Vector3 is used as a row vector for:
+        //
+        //     H * P
+        //
+        // and as a column vector for:
+        //
+        //     P * Hᵀ
+        let H = position / predicted_distance;
+
+        // P * Hᵀ for each state block.
+        //
+        // u = P * Hᵀ
+        //
+        //     [ P_PP * Hᵀ ]
+        // u = [ P_VP * Hᵀ ]
+        //     [ P_BP * Hᵀ ]
+
+        // P * Hᵀ
+        let P_pos = self.P[Self::PP] * H;
+        let P_vel = self.P[Self::VP] * H;
+        let P_acc_bias = self.P[Self::BP] * H;
+
+        // Innovation covariance:
+        //
+        // S = H * P * Hᵀ + R
+        //   = H * P_PP * Hᵀ + R
+        let S = H.dot(P_pos) + R;
+
+        if S <= f32::EPSILON {
+            return;
+        }
+        let S_inv = 1.0 / S;
+
+        // Calculate the residual.
+        // y = z - H * x
+        let residual = measured_distance - predicted_distance;
+
+        // Normalized residual squared (Mahalanobis distance squared).
+        let mahalanobis_squared = residual * residual * S_inv;
+
+        if mahalanobis_squared > mahalanobis_squared_threshold {
+            // Reject this measurement as an outlier.
+            return;
+        }
+
+        // Calculate K, the Kalman gain.
+        // K = P * Hᵀ * S⁻¹
+        let K_pos = P_pos * S_inv;
+        let K_vel = P_vel * S_inv;
+        let K_acc_bias = P_acc_bias * S_inv;
+
+        // Update the physical state vectors
+        // x += K * y
+        self.state.pos += K_pos * residual;
+        self.state.vel += K_vel * residual;
+        self.state.acc_bias += K_acc_bias * residual;
+
+        // Covariance update:
+        //     P_new = P - K * H * P
+        // where:
+        //     K = P * Hᵀ / S
+        // Therefore, assuming P is symmetric:
+        //     P_new = P - (P * Hᵀ) * (P * Hᵀ)ᵀ / S
+        // This is a rank-1 update of the full 9x9 covariance.
+        self.P[Self::PP] -= Matrix3x3::outer_product(K_pos, P_pos);
+        self.P[Self::PV] -= Matrix3x3::outer_product(K_pos, P_vel);
+        self.P[Self::PB] -= Matrix3x3::outer_product(K_pos, P_acc_bias);
+
+        self.P[Self::VP] -= Matrix3x3::outer_product(K_vel, P_pos);
+        self.P[Self::VV] -= Matrix3x3::outer_product(K_vel, P_vel);
+        self.P[Self::VB] -= Matrix3x3::outer_product(K_vel, P_acc_bias);
+
+        self.P[Self::BP] -= Matrix3x3::outer_product(K_acc_bias, P_pos);
+        self.P[Self::BV] -= Matrix3x3::outer_product(K_acc_bias, P_vel);
+        self.P[Self::BB] -= Matrix3x3::outer_product(K_acc_bias, P_acc_bias);
+
+        // Ensure numerical stability by enforcing symmetry on the covariance matrix.
+        self.P.enforce_symmetry();
+    }
+
     pub fn correct_position(&mut self, position: Vector3f32, R: Vector3f32) {
-        self.correct_position_delayed(position, self.pos, R);
+        self.correct_position_standard_form(position, self.state.pos, R);
     }
 
     pub fn correct_position_joseph(&mut self, position: Vector3f32, R: Vector3f32) {
-        self.correct_position_delayed_joseph(position, self.pos, R);
+        self.correct_position_joseph_stabilized_form(position, self.state.pos, R);
     }
 
     pub fn correct_position_xy(&mut self, position: Vector2f32, R: Vector2f32) {
-        self.correct_position_xy_delayed(position, self.pos, R);
+        self.correct_position_xy_standard_form(position, self.state.pos, R);
     }
 }
 
@@ -596,6 +713,36 @@ impl KalmanFilterXYZ {
     }
 }
 
+#[allow(unused)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KalmanStateXYZ {
+    // 3D Kinematic State Vectors
+    /// Position {x, y, z}.
+    pub pos: Vector3f32,
+    /// Velocity {x, y, z}.
+    pub vel: Vector3f32,
+    /// Accelerometer Bias {x, y, z}.
+    pub acc_bias: Vector3f32,
+}
+
+impl Default for KalmanStateXYZ {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KalmanStateXYZ {
+    /// Constructor.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            pos: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            vel: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+            acc_bias: Vector3f32 { x: 0.0, y: 0.0, z: 0.0 },
+        }
+    }
+}
+
 #[cfg(test)]
 mod test_traits {
     use super::*;
@@ -635,7 +782,7 @@ mod tests {
         let gravity = Vector3f32 { x: 0.0, y: 0.0, z: 9.80665 }; // NED gravity
 
         // Prime the filter's initial position guess to match our starting point
-        filter.pos = true_pos;
+        filter.state.pos = true_pos;
 
         println!("\n--- PHASE 1: STATIONARY GPS LOCK (1 SECOND) ---");
         #[allow(clippy::cast_possible_truncation)]
@@ -652,9 +799,9 @@ mod tests {
         }
 
         // --- PHASE 1 AUDIT LOGS ---
-        println!("Stationary -> True Pos X: {:.4}, Estimated Pos X: {:.4}", true_pos.x, filter.pos.x);
-        println!("Stationary -> True Vel X: {:.4}, Estimated Vel X: {:.4}", true_vel.x, filter.vel.x);
-        println!("Stationary -> True Bias X: {:.4}, Estimated Bias X: {:.4}", true_bias.x, filter.acc_bias.x);
+        println!("Stationary -> True Pos X: {:.4}, Estimated Pos X: {:.4}", true_pos.x, filter.pos().x);
+        println!("Stationary -> True Vel X: {:.4}, Estimated Vel X: {:.4}", true_vel.x, filter.vel().x);
+        println!("Stationary -> True Bias X: {:.4}, Estimated Bias X: {:.4}", true_bias.x, filter.acc_bias().x);
 
         // Verification assertions for Phase 1
         assert!((filter.pos().x - true_pos.x).abs() < 0.05, "Position drifted while stationary!");
@@ -685,10 +832,10 @@ mod tests {
         }
 
         // --- PHASE 2 AUDIT LOGS ---
-        println!("Maneuver -> True Final Pos X: {:.4}, Estimated Final Pos X: {:.4}", true_pos.x, filter.pos.x);
-        println!("Maneuver -> True Final Pos Y: {:.4}, Estimated Final Pos Y: {:.4}", true_pos.y, filter.pos.y);
-        println!("Maneuver -> True Final Vel X: {:.4}, Estimated Final Vel X: {:.4}", true_vel.x, filter.vel.x);
-        println!("Maneuver -> True Final Vel Y: {:.4}, Estimated Final Vel Y: {:.4}", true_vel.y, filter.vel.y);
+        println!("Maneuver -> True Final Pos X: {:.4}, Estimated Final Pos X: {:.4}", true_pos.x, filter.pos().x);
+        println!("Maneuver -> True Final Pos Y: {:.4}, Estimated Final Pos Y: {:.4}", true_pos.y, filter.pos().y);
+        println!("Maneuver -> True Final Vel X: {:.4}, Estimated Final Vel X: {:.4}", true_vel.x, filter.vel().x);
+        println!("Maneuver -> True Final Vel Y: {:.4}, Estimated Final Vel Y: {:.4}", true_vel.y, filter.vel().y);
 
         // Tracking precision assertions
         assert!((filter.pos().x - true_pos.x).abs() < 0.1, "Filter missed true physical X position track!");
@@ -794,5 +941,228 @@ mod tests {
         assert!((filter.vel().z - true_vel.z).abs() < 0.1, "Filter velocity tracking diverged during climb!");
 
         println!("\n✅ All Kalman Filter math, indices, and coordinate signs verified successfully!");
+    }
+}
+
+#[cfg(test)]
+mod test_anchors {
+    use super::*;
+    use num_traits::Zero;
+
+    const EPS: f32 = 1.0e-5;
+
+    fn v(x: f32, y: f32, z: f32) -> Vector3f32 {
+        Vector3f32 { x, y, z }
+    }
+
+    fn assert_near(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < EPS,
+            "expected {}, got {}, error {}",
+            expected,
+            actual,
+            (actual - expected).abs(),
+        );
+    }
+
+    fn assert_vector_near(actual: Vector3f32, expected: Vector3f32) {
+        assert_near(actual.x, expected.x);
+        assert_near(actual.y, expected.y);
+        assert_near(actual.z, expected.z);
+    }
+
+    fn assert_matrix_near(actual: Matrix3x3f32, expected: Matrix3x3f32) {
+        for row in 0..3 {
+            let a = actual.row(row);
+            let e = expected.row(row);
+
+            assert_near(a.x, e.x);
+            assert_near(a.y, e.y);
+            assert_near(a.z, e.z);
+        }
+    }
+
+    fn make_filter() -> KalmanFilterXYZ {
+        KalmanFilterXYZ {
+            state: KalmanStateXYZ { pos: v(3.0, 4.0, 0.0), vel: v(0.0, 0.0, 0.0), acc_bias: v(0.0, 0.0, 0.0) },
+
+            P: Matrix3x3xM3x3f32::identity(),
+
+            Q_velocity: 0.0,
+            Q_bias: 0.0,
+        }
+    }
+
+    #[test]
+    fn range_update_basic() {
+        let mut kf = make_filter();
+
+        // Position = (3,4,0), anchor = (0,0,0)
+        // Predicted range = 5
+        //
+        // H = [0.6, 0.8, 0]
+        //
+        // Measurement = 6
+        // residual = +1
+        //
+        // S = 1 + 0.01 = 1.01
+
+        kf.correct_position_using_anchor_distance(v(0.0, 0.0, 0.0), 6.0, 100.0, 0.01);
+
+        let scale = 1.0 / 1.01;
+
+        assert_vector_near(kf.state.pos, v(3.0 + 0.6 * scale, 4.0 + 0.8 * scale, 0.0));
+
+        // No cross covariance, so velocity and bias should not change.
+        assert_vector_near(kf.state.vel, v(0.0, 0.0, 0.0));
+
+        assert_vector_near(kf.state.acc_bias, v(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn range_update_corrects_velocity_through_cross_covariance() {
+        let identity = Matrix3x3f32::identity();
+        let zero = Matrix3x3f32::zero();
+
+        let cross = Matrix3x3f32::from_diagonal_element(0.5);
+
+        let mut kf = KalmanFilterXYZ {
+            state: KalmanStateXYZ { pos: v(3.0, 4.0, 0.0), vel: v(0.0, 0.0, 0.0), acc_bias: v(0.0, 0.0, 0.0) },
+
+            P: Matrix3x3xM3x3f32::from_column_array([
+                // PP, VP, BP
+                identity, cross, zero, // PV, VV, BV
+                cross, identity, zero, // PB, VB, BB
+                zero, zero, identity,
+            ]),
+
+            Q_velocity: 0.0,
+            Q_bias: 0.0,
+        };
+
+        kf.correct_position_using_anchor_distance(v(0.0, 0.0, 0.0), 6.0, 100.0, 0.01);
+
+        // P_VP * H^T:
+        //
+        // [0.5 0   0]   [0.6]   [0.3]
+        // [0   0.5 0] * [0.8] = [0.4]
+        // [0   0   0.5] [0  ]   [0.0]
+        //
+        // S = 1.01
+        //
+        // residual = 1
+
+        let scale = 1.0 / 1.01;
+
+        assert_vector_near(kf.state.vel, v(0.3 * scale, 0.4 * scale, 0.0));
+    }
+
+    #[test]
+    fn range_update_corrects_accelerometer_bias_through_cross_covariance() {
+        let identity = Matrix3x3f32::identity();
+        let zero = Matrix3x3f32::zero();
+
+        let bp = Matrix3x3f32::from_diagonal_array([0.2, 0.3, 0.4]);
+        let pb = bp;
+
+        let mut kf = KalmanFilterXYZ {
+            state: KalmanStateXYZ { pos: v(3.0, 4.0, 0.0), vel: v(0.0, 0.0, 0.0), acc_bias: v(0.0, 0.0, 0.0) },
+
+            P: Matrix3x3xM3x3f32::from_column_array([
+                // PP, VP, BP
+                identity, zero, bp, // PV, VV, BV
+                zero, identity, zero, // PB, VB, BB
+                pb, zero, identity,
+            ]),
+
+            Q_velocity: 0.0,
+            Q_bias: 0.0,
+        };
+
+        kf.correct_position_using_anchor_distance(v(0.0, 0.0, 0.0), 6.0, 100.0, 0.01);
+
+        // P_BP * H^T =
+        //
+        // [0.2 * 0.6] = 0.12
+        // [0.3 * 0.8] = 0.24
+        // [0.4 * 0.0] = 0.00
+
+        let scale = 1.0 / 1.01;
+
+        assert_vector_near(kf.state.acc_bias, v(0.12 * scale, 0.24 * scale, 0.0));
+    }
+
+    #[test]
+    fn perfect_range_does_not_change_state() {
+        let mut kf = make_filter();
+
+        let original_pos = kf.state.pos;
+        let original_vel = kf.state.vel;
+        let original_bias = kf.state.acc_bias;
+
+        // Predicted range is exactly 5.
+        kf.correct_position_using_anchor_distance(v(0.0, 0.0, 0.0), 5.0, 100.0, 0.01);
+
+        assert_vector_near(kf.state.pos, original_pos);
+        assert_vector_near(kf.state.vel, original_vel);
+        assert_vector_near(kf.state.acc_bias, original_bias);
+    }
+
+    #[test]
+    fn outlier_is_rejected_without_changing_filter() {
+        let mut kf = make_filter();
+
+        let original_pos = kf.state.pos;
+        let original_vel = kf.state.vel;
+        let original_bias = kf.state.acc_bias;
+        let original_p = kf.P;
+
+        // Predicted range = 5.
+        // 100 m is obviously an outlier.
+        kf.correct_position_using_anchor_distance(v(0.0, 0.0, 0.0), 100.0, 6.63, 0.01);
+
+        assert_vector_near(kf.state.pos, original_pos);
+        assert_vector_near(kf.state.vel, original_vel);
+        assert_vector_near(kf.state.acc_bias, original_bias);
+
+        assert_matrix_near(kf.P[KalmanFilterXYZ::PP], original_p[KalmanFilterXYZ::PP]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::PV], original_p[KalmanFilterXYZ::PV]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::PB], original_p[KalmanFilterXYZ::PB]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::VP], original_p[KalmanFilterXYZ::VP]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::VV], original_p[KalmanFilterXYZ::VV]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::VB], original_p[KalmanFilterXYZ::VB]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::BP], original_p[KalmanFilterXYZ::BP]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::BV], original_p[KalmanFilterXYZ::BV]);
+        assert_matrix_near(kf.P[KalmanFilterXYZ::BB], original_p[KalmanFilterXYZ::BB]);
+    }
+    #[test]
+    fn range_update_reduces_radial_position_variance() {
+        let mut kf = make_filter();
+
+        let h = v(0.6, 0.8, 0.0);
+
+        let before = h.dot(kf.P[KalmanFilterXYZ::PP] * h);
+
+        kf.correct_position_using_anchor_distance(v(0.0, 0.0, 0.0), 5.0, 100.0, 0.01);
+
+        let after = h.dot(kf.P[KalmanFilterXYZ::PP] * h);
+
+        assert!(after < before, "radial variance should decrease: before={before}, after={after}");
+
+        // With identity P and a range-only measurement,
+        // the direction perpendicular to H should retain its
+        // original variance.
+        let perpendicular = v(-0.8, 0.6, 0.0);
+
+        let before_perp = perpendicular.dot(kf.P[KalmanFilterXYZ::PP] * perpendicular);
+
+        assert_near(before_perp, 1.0);
+
+        // Z is completely unobserved by this range measurement.
+        let z = v(0.0, 0.0, 1.0);
+
+        let z_variance = z.dot(kf.P[KalmanFilterXYZ::PP] * z);
+
+        assert_near(z_variance, 1.0);
     }
 }
